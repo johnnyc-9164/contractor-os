@@ -5,8 +5,8 @@ Audit date: 2026-09-24
 ## Repository state
 
 - Graft navigation (`graft map`, `graft ask`) responded successfully (exit 0); it is the repo's navigation source.
-- `git status --short --branch`: clean local branch `master` after the audit/plan edits are staged for baseline amendment.
-- Local root commit `b2a8b68 chore: establish audited baseline` exists; no remote is configured.
+- `git status --short --branch`: clean local branch `master` tracking `origin/master` after the baseline push.
+- Baseline commit `7bac8d6 chore: establish audited baseline` exists on `origin/master` at `https://github.com/johnnyc-9164/contractor-os` (private repository).
 - The baseline contains 100 tracked files. It excludes `.env` value files, `.vercel`, `node_modules`, the Graft cache, key/certificate files, and local skill installation directories. It includes `apps/web/.env.schema`.
 - Repository areas include `apps/web/` (Next.js app), `packages/backend/` (Convex), `packages/ui/`, `packages/config/`, root tooling, and `scripts/`.
 - `.agents/skills/` and `.claude/skills/` are locally installed upstream skill content whose hashes were altered by the authorized Biome write pass. Those local directories are excluded from version control; `skills-lock.json` remains tracked. `graft/` and generated `apps/web/src/env.ts` are excluded from the baseline.
@@ -18,13 +18,14 @@ Audit date: 2026-09-24
 |---|---|---|
 | Clerk | CONFIGURED | Dependencies, proxy/provider, and Convex auth configuration exist; no live sign-in was run. |
 | Convex | CONFIGURED | Schemas, functions, and generated bindings exist; no deployed health query was run. |
-| Vercel | CONFIGURED | `vercel.json`, scripts, and local state exist; no deployment was run. |
+| Vercel CLI/project | VERIFIED | `vercel whoami` (exit 0) reports `johnnyc-9164`; `vercel project ls` (exit 0) lists `contractoros`, and `.vercel/project.json` links this checkout to that project. No deployment was run. |
+| Vercel Git connection | BROKEN | `vercel git connect https://github.com/johnnyc-9164/contractor-os.git` (exit 1) could not connect the private repository. Project Git settings state it is not connected; Vercel's GitHub App must be installed with access to the repository. User authorized that access, but the browser is currently signed in to the wrong GitHub account for this repository. |
 | Varlock | VERIFIED | `pnpm install --frozen-lockfile` completed code generation successfully (exit 0). |
 | PWA | CONFIGURED | Manifest, service worker, offline page, and icons exist; browser install/offline behavior is unverified. |
 | Graft | VERIFIED | `graft map` and `graft ask ... --source` returned context (exit 0). |
 | Context7 | VERIFIED | Resolved `/microsoft/typescript` and queried `verbatimModuleSyntax`; no matching TypeScript 6.0.3 docs version was available. |
 | Jev | VERIFIED | Jev gate/choice tools responded; selected read-only inspection of existing GitHub browser sessions. |
-| GitHub remote | MISSING | `git remote -v` returned no remote. No repository was created. |
+| GitHub remote | VERIFIED | `gh auth status` and `gh api user` (exit 0) identify active user `johnnyc-9164`; `gh repo create johnnyc-9164/contractor-os --private --source . --remote origin --push` (exit 0) created the private repo and pushed `master`. User confirmed this is the account associated with `johnnyc@agentmail.to`. |
 
 ## Checks on the baseline
 
@@ -42,23 +43,22 @@ Audit date: 2026-09-24
 - `.env.local` was inspected under the user's authorization; it contains a set `VERCEL_OIDC_TOKEN`. The value was never emitted or committed.
 - `apps/web/.env` and `apps/web/.env.local` are ignored; values were not emitted or committed.
 - `git check-ignore -v` confirmed env value files are excluded. `apps/web/.env.schema` is included as a non-secret schema.
-- The initial commit-path audit found no env-value paths or key/certificate files among its 100 files. Repeat the path audit after the amendment.
+- `git ls-tree -r --name-only HEAD` contains `apps/web/.env.schema` but no `.env` value files, private key, or certificate paths. `git check-ignore -v .env.local apps/web/.env apps/web/.env.local` confirms local value files are ignored.
 
 ## GitHub identity gate
 
-- `gh auth status` (exit 0) showed active login `mplsjohnnycage` and an inactive login `skysthelimitpainting1779-collab`.
-- GitHub settings in the active browser session showed primary verified email `mplsjohnnycage@makeithappenentllc.com`; `johnnyc@agentmail.to` was not listed. Another listed address was unverified.
-- `gh api user/emails` requires a `user` scope not present on the active token. The user authorized refresh; GitHub's device flow requires user entry of its one-time code, which the agent did not enter. Read-only browser inspection found no second signed-in GitHub session.
-- A later user attachment visibly contains a GitHub personal access token. It is not used or copied. Revoke it in GitHub token settings; treat it as exposed.
-- No repository was created under an unverified account, and no remote push occurred. The local commit author used the user-provided `johnnyc@agentmail.to` only as commit metadata.
+- `gh auth status` and `gh api user` (exit 0) identify active login `johnnyc-9164`; the user confirmed this is the intended GitHub account associated with `johnnyc@agentmail.to`.
+- `gh api user/emails` remains unavailable (exit 1) because the token does not include GitHub's `user` scope; email ownership is confirmed by the user, not independently read from the API.
+- The prior audit records a user-supplied attachment visibly contained a GitHub personal access token. The token was not copied or used; treat it as exposed and revoke it in GitHub token settings.
+- The Vercel GitHub App install page opened under a browser session signed in as `mplsjohnnycage`, so installation was not approved for the wrong account. User authorization to grant Vercel access to `contractor-os` was received; the user must complete the account handoff/sign-in as `johnnyc-9164` before installation can continue.
 
 ## Remaining gaps by leverage
 
-1. Authenticate and verify the account whose verified email is exactly `johnnyc@agentmail.to`; create private `contractor-os`, set `origin`, push the baseline, and verify the remote commit.
-2. After the remote exists, create a cycle milestone and issues with acceptance criteria and verification commands.
+1. Complete Vercel GitHub App installation while signed in as `johnnyc-9164`, grant access only to `contractor-os`, connect the repository to Vercel project `contractoros`, and verify Git-triggered preview behavior.
+2. Create the cycle milestone and convert the remaining plan items into tracked GitHub issues.
 3. At the first feature, add a test script and automated coverage; absent tests are an accepted gap until then.
-4. With approved non-production credentials, verify Clerk sign-in, Convex health, Vercel preview, and PWA offline behavior.
+4. With approved non-production credentials, verify Clerk sign-in, Convex health, and PWA offline behavior.
 
 ## Stage status
 
-Stage 0 is complete locally: audit exists, secrets are excluded, checks were run, and a baseline commit exists. Stage 1 remains incomplete because the correct GitHub account is not authenticated. No remote, issues, Stage 2 spec, task contract, PR, review, or merge exists.
+Stage 0 is complete: audit exists, secret paths are excluded, checks were rerun, and baseline `7bac8d6` is pushed. Stage 1 repository creation/push is complete. Stage 1 tracking and the Vercel Git connection remain in progress. No feature spec, task contract, PR, review, or merge exists.
