@@ -475,3 +475,118 @@ describe("lead pipeline", () => {
 		expect(response.error?.code).toBe("GUARD_STAGE");
 	});
 });
+
+describe("lead identity bridge (TC-LEAD-01)", () => {
+	async function seedQualifiedLead(t: ReturnType<typeof setup>) {
+		const authed = await seedIdentity(
+			t,
+			"usr_johnny",
+			"principal",
+			JOHNNY_SUBJECT,
+		);
+		await t.mutation(components.contractorOs.records.co_client.create, {
+			tenantId: TENANT_ID,
+			actorId: "seed",
+			requestKey: "bridge-client",
+			identifier: "client-bridge",
+			title: "Bridge Client",
+			properties: { status: "prospect" },
+		});
+		let request = 0;
+		const dispatch = (contract: string, payload: unknown) =>
+			authed.mutation(
+				api.catalog.dispatch,
+				dispatchArgs(
+					contract,
+					payload,
+					`bridge-${String(++request).padStart(2, "0")}`,
+				),
+			);
+		const captured = await dispatch("lead.capture", {
+			title: "Bridge lead",
+			source: "referral",
+		});
+		const localKey = captured.record_id as string;
+		await dispatch("lead.sendOutreach", { lead_id: localKey, channel: "call" });
+		await dispatch("lead.recordReply", {
+			lead_id: localKey,
+			reply_summary: "Interested",
+		});
+		const qualified = await dispatch("lead.qualify", {
+			lead_id: localKey,
+			client_name: "client-bridge",
+			qualification_notes: "Qualified",
+		});
+		expect(qualified.ok, JSON.stringify(qualified)).toBe(true);
+		// Envelope prepends record_id: entity_refs = [localKey, coLeadId]
+		const coLeadId = qualified.entity_refs[1] as string;
+		expect(coLeadId).toBeTruthy();
+		return { authed, localKey, coLeadId, dispatch };
+	}
+
+	it("findLead resolves a local lead_<ulid> key (existing behavior)", async () => {
+		const t = setup();
+		const authed = await seedIdentity(
+			t,
+			"usr_johnny",
+			"principal",
+			JOHNNY_SUBJECT,
+		);
+		const leadId = await seedLead(t, "Prospect");
+		const response = await authed.mutation(
+			api.catalog.dispatch,
+			dispatchArgs(
+				"lead.sendOutreach",
+				{ lead_id: leadId, channel: "call" },
+				"bridge-local",
+			),
+		);
+		expect(response.ok).toBe(true);
+		expect(response.status).toBe("Outreach Sent");
+	});
+
+	it("findLead resolves a co_lead identifier via co_lead_id", async () => {
+		const t = setup();
+		const { coLeadId, dispatch } = await seedQualifiedLead(t);
+		// Dispatch using the component identifier, not the local key.
+		const visit = await dispatch("lead.scheduleSiteVisit", {
+			lead_id: coLeadId,
+			scheduled_at: "2099-01-01T00:00:00.000Z",
+		});
+		expect(visit.ok, JSON.stringify(visit)).toBe(true);
+		expect(visit.status).toBe("Site Visit Scheduled");
+		const record = await t.run((ctx) =>
+			ctx.db
+				.query("leads")
+				.withIndex("by_co_lead_id", (q) => q.eq("co_lead_id", coLeadId))
+				.unique(),
+		);
+		expect(record?.stage).toBe("Site Visit Scheduled");
+	});
+
+	it("findLead still throws NOT_FOUND for unknown identifiers", async () => {
+		const t = setup();
+		const authed = await seedIdentity(
+			t,
+			"usr_johnny",
+			"principal",
+			JOHNNY_SUBJECT,
+		);
+		for (const [suffix, lead_id] of [
+			["unknown-local", "lead_does_not_exist_0001"],
+			["unknown-component", "co_lead_no_such_identifier"],
+		] as const) {
+			const response = await authed.mutation(
+				api.catalog.dispatch,
+				dispatchArgs("lead.sendOutreach", { lead_id, channel: "call" }, suffix),
+			);
+			expect(response.ok).toBeFalsy();
+			expect(response.error?.code).toBe("NOT_FOUND");
+		}
+		// Both failures logged blocked attempts.
+		const events = await t.run((ctx) => ctx.db.query("event_log").collect());
+		expect(
+			events.filter((event) => event.action === "catalog.blocked_attempt"),
+		).toHaveLength(2);
+	});
+});

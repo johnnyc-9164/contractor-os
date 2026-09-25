@@ -82,7 +82,11 @@ export default defineSchema({
 		qualification_notes: v.optional(v.string()),
 		co_lead_id: v.optional(v.string()),
 		reopened_from: v.optional(v.string()),
-	}).index("by_key", ["key"]),
+	})
+		.index("by_key", ["key"])
+		// TC-LEAD-01: bridge index. UI lists co_lead identifiers (listLeads) but
+		// dispatches lead.* ops; findLead falls back here when by_key misses.
+		.index("by_co_lead_id", ["co_lead_id"]),
 
 	// ── Entity 1: Opportunity ──────────────────────────────────────────────
 	opportunities: defineTable({

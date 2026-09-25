@@ -43,10 +43,19 @@ function newUlid(): string {
 }
 
 async function findLead(ctx: MutationCtx, leadId: string) {
-	const record = await ctx.db
+	// Primary: local operational key (lead_<ulid>)
+	let record = await ctx.db
 		.query("leads")
 		.withIndex("by_key", (q) => q.eq("key", leadId))
 		.unique();
+	// Fallback: vendored component identifier, bridged via co_lead_id.
+	// UI surfaces list co_leads (api.backend.listLeads) but dispatch lead.* ops.
+	if (!record) {
+		record = await ctx.db
+			.query("leads")
+			.withIndex("by_co_lead_id", (q) => q.eq("co_lead_id", leadId))
+			.unique();
+	}
 	if (!record)
 		throw new LeadServiceError("NOT_FOUND", `Lead ${leadId} not found`);
 	return record;
