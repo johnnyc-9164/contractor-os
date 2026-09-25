@@ -43,9 +43,13 @@ async function seedBoundUser(
 	displayName: string,
 	role: "owner" | "principal" | "crew" | "viewer" | "agent_owner",
 	subject: string,
+	// Authenticated owner/principal session for non-bootstrap binds.
+	// Omit only for the first-ever bind (bootstrap ceremony).
+	binder?: { mutation: typeof t.mutation },
 ) {
 	await seedUser(t, userKey, displayName, role);
-	await t.mutation(api.identity.bind, {
+	const caller = binder ?? t;
+	await caller.mutation(api.identity.bind, {
 		user_key: userKey,
 		provider: "clerk",
 		provider_subject: subject,
@@ -335,6 +339,7 @@ describe("multi-user chain", () => {
 			"Johnny Cage",
 			"principal",
 			SUBJECT_JOHNNY,
+			anthony,
 		);
 
 		const a1 = await anthony.mutation(api.events.append, {

@@ -1,8 +1,10 @@
 // TC-BUILD-2: Build Pack §22.5 identity_bindings lifecycle + §23.6 session resolution.
 //
-// One write path (`identity.bind`, B-04). No auto-provisioning: the user row
-// must already exist; an unknown subject lands on a "request access" hold and
-// a principal binds it explicitly. Bindings are superseded, never deleted.
+// One authorization-gated write path (`identity.bind`, B-04). No
+// auto-provisioning: the user row must already exist; an unknown subject lands
+// on a "request access" hold and an authenticated owner/principal binds it
+// explicitly. The sole exception is the one-time unauthenticated bootstrap
+// ceremony before any binding exists. Bindings are superseded, never deleted.
 
 import { v } from "convex/values";
 import type { DatabaseReader } from "./_generated/server";
@@ -73,6 +75,10 @@ export async function requireActiveBinding(
 /**
  * The ONE write path for identity_bindings (§22.5, B-04).
  *
+ * - Authenticated callers must have an active Clerk binding and the `owner` or
+ *   `principal` role.
+ * - Bootstrap ceremony: an unauthenticated caller may create the first-ever
+ *   binding only. Once any binding row exists, unauthenticated binds fail.
  * - The user must already exist in `users` (no auto-provisioning).
  * - UNIQUE(provider, provider_subject): one subject, one user, ever — a
  *   subject bound to a different user is rejected.
@@ -88,6 +94,28 @@ export const bind = mutation({
 		provider_subject: v.string(),
 	},
 	handler: async (ctx, args) => {
+		const sessionIdentity = await ctx.auth.getUserIdentity();
+		let actor: string;
+		if (!sessionIdentity) {
+			const existingBinding = await ctx.db.query("identity_bindings").first();
+			if (existingBinding) {
+				throw new Error(
+					"identity.bind: unauthenticated binds are forbidden after bootstrap",
+				);
+			}
+			actor = "system";
+		} else {
+			const { user: caller } = await requireActiveBinding(
+				ctx.db,
+				PROVIDER_CLERK,
+				sessionIdentity.tokenIdentifier,
+			);
+			if (caller.role !== "owner" && caller.role !== "principal") {
+				throw new Error("identity.bind: owner or principal role required");
+			}
+			actor = sessionIdentity.tokenIdentifier;
+		}
+
 		const user = await ctx.db
 			.query("users")
 			.withIndex("by_key", (q) => q.eq("key", args.user_key))
@@ -120,11 +148,6 @@ export const bind = mutation({
 			)
 			.filter((q) => q.eq(q.field("status"), "active"))
 			.first();
-
-		// Server-resolved actor for the provenance block (§23.6): the session
-		// user when present, "system" for the bootstrap ceremony.
-		const sessionIdentity = await ctx.auth.getUserIdentity();
-		const actor = sessionIdentity ? sessionIdentity.tokenIdentifier : "system";
 
 		if (existing) {
 			if (existing.provider_subject === args.provider_subject) {

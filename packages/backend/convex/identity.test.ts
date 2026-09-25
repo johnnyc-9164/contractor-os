@@ -8,6 +8,7 @@ const modules = import.meta.glob("./**/*.ts");
 
 const SUBJECT_ANTHONY = "https://clerk.test.local|user_anthony_001";
 const SUBJECT_ANTHONY_ROTATED = "https://clerk.test.local|user_anthony_002";
+const SUBJECT_CREW = "https://clerk.test.local|user_crew_001";
 
 function setup() {
 	return convexTest(schema, modules);
@@ -46,7 +47,7 @@ async function bindingRow(t: ReturnType<typeof setup>, key: string) {
 }
 
 describe("identity.bind", () => {
-	it("creates an active binding for an existing user", async () => {
+	it("bootstrap ceremony: first-ever bind with no session succeeds", async () => {
 		const t = setup();
 		await seedUser(t, "usr_anthony", "Anthony Briseno", "owner");
 
@@ -65,6 +66,53 @@ describe("identity.bind", () => {
 		expect(row?.provider).toBe("clerk");
 		expect(row?.provider_subject).toBe(SUBJECT_ANTHONY);
 		expect(row?.status).toBe("active");
+		expect(row?.created_by).toBe("system");
+	});
+
+	it("unauthenticated bind after bootstrap throws", async () => {
+		const t = setup();
+		await seedUser(t, "usr_anthony", "Anthony Briseno", "owner");
+		await t.mutation(api.identity.bind, {
+			user_key: "usr_anthony",
+			provider: "clerk",
+			provider_subject: SUBJECT_ANTHONY,
+		});
+		await seedUser(t, "usr_johnny", "Johnny Cage", "principal");
+
+		await expect(
+			t.mutation(api.identity.bind, {
+				user_key: "usr_johnny",
+				provider: "clerk",
+				provider_subject: "https://clerk.test.local|user_johnny_001",
+			}),
+		).rejects.toThrow(/unauthenticated binds are forbidden after bootstrap/);
+	});
+
+	it("non-principal bind throws", async () => {
+		const t = setup();
+		await seedUser(t, "usr_anthony", "Anthony Briseno", "owner");
+		await t.mutation(api.identity.bind, {
+			user_key: "usr_anthony",
+			provider: "clerk",
+			provider_subject: SUBJECT_ANTHONY,
+		});
+		await seedUser(t, "usr_crew", "Crew Member", "crew");
+		const anthonyAuthed = t.withIdentity({ tokenIdentifier: SUBJECT_ANTHONY });
+		await anthonyAuthed.mutation(api.identity.bind, {
+			user_key: "usr_crew",
+			provider: "clerk",
+			provider_subject: SUBJECT_CREW,
+		});
+		await seedUser(t, "usr_viewer", "Viewer", "viewer");
+
+		const crewAuthed = t.withIdentity({ tokenIdentifier: SUBJECT_CREW });
+		await expect(
+			crewAuthed.mutation(api.identity.bind, {
+				user_key: "usr_viewer",
+				provider: "clerk",
+				provider_subject: "https://clerk.test.local|user_viewer_001",
+			}),
+		).rejects.toThrow(/owner or principal role required/);
 	});
 
 	it("supersedes (never deletes) the prior active binding for (user, provider)", async () => {
@@ -76,7 +124,8 @@ describe("identity.bind", () => {
 			provider: "clerk",
 			provider_subject: SUBJECT_ANTHONY,
 		});
-		const second = await t.mutation(api.identity.bind, {
+		const authed = t.withIdentity({ tokenIdentifier: SUBJECT_ANTHONY });
+		const second = await authed.mutation(api.identity.bind, {
 			user_key: "usr_anthony",
 			provider: "clerk",
 			provider_subject: SUBJECT_ANTHONY_ROTATED,
@@ -101,7 +150,8 @@ describe("identity.bind", () => {
 			provider: "clerk",
 			provider_subject: SUBJECT_ANTHONY,
 		});
-		const second = await t.mutation(api.identity.bind, {
+		const authed = t.withIdentity({ tokenIdentifier: SUBJECT_ANTHONY });
+		const second = await authed.mutation(api.identity.bind, {
 			user_key: "usr_anthony",
 			provider: "clerk",
 			provider_subject: SUBJECT_ANTHONY,
@@ -132,8 +182,9 @@ describe("identity.bind", () => {
 			provider: "clerk",
 			provider_subject: SUBJECT_ANTHONY,
 		});
+		const authed = t.withIdentity({ tokenIdentifier: SUBJECT_ANTHONY });
 		await expect(
-			t.mutation(api.identity.bind, {
+			authed.mutation(api.identity.bind, {
 				user_key: "usr_johnny",
 				provider: "clerk",
 				provider_subject: SUBJECT_ANTHONY,
