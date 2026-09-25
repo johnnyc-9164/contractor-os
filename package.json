@@ -21,7 +21,7 @@
 		"deploy:prod": "vercel deploy --prod",
 		"deploy:check": "vercel deploy --dry",
 		"env:generate": "varlock codegen --path ./apps/web/",
-		"postinstall": "varlock codegen --path ./apps/web/",
+		"postinstall": "node -e \"const fs=require('fs');if(fs.existsSync('./apps/web/.env')||fs.existsSync('./apps/web/.env.local')){require('child_process').execSync('varlock codegen --path ./apps/web/',{stdio:'inherit'})}else{console.log('No .env file, skipping varlock codegen (using committed src/env.ts)')}\"",
 		"check": "biome check --write .",
 		"biome": "biome check .",
 		"test": "vitest run",

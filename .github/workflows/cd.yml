@@ -56,7 +56,7 @@ jobs:
       - name: production health check (poll until live)
         run: |
           for i in $(seq 1 30); do
-            if curl -sf https://contractoros-johnnyc.vercel.app/ > /dev/null; then
+            if curl -sf https://contractoros-ten.vercel.app/ > /dev/null; then
               echo "production homepage reachable (attempt $i)"
               exit 0
             fi
