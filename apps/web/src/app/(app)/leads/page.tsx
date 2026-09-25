@@ -9,8 +9,8 @@ import {
 	Unauthenticated,
 	useQuery,
 } from "convex/react";
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { LeadDrawer } from "../../../components/leads/lead-drawer";
 import { displayStage, nextStage, stageGroup } from "./lead-stages";
 
 type Lead = {
@@ -50,6 +50,8 @@ function relativeDate(timestamp: number): string {
 function LeadList() {
 	const [cursor, setCursor] = useState<string | null>(null);
 	const [loadedLeads, setLoadedLeads] = useState<Lead[]>([]);
+	const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+	const [drawerOpen, setDrawerOpen] = useState(false);
 	const result = useQuery(api.backend.listLeads, {
 		paginationOpts: { numItems: 20, cursor },
 	});
@@ -130,16 +132,17 @@ function LeadList() {
 								const next = nextStage(lead.state);
 								return (
 									<tr
-										className="border-border border-b transition-colors hover:bg-muted/50"
+										className="cursor-pointer border-border border-b transition-colors hover:bg-muted/50"
 										key={lead.id}
+										onClick={() => {
+											setSelectedLead(lead);
+											setDrawerOpen(true);
+										}}
 									>
 										<td className="px-6 py-4">
-											<Link
-												className="font-medium underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-2"
-												href={`/leads/${encodeURIComponent(lead.identifier)}?state=${encodeURIComponent(lead.state)}`}
-											>
+											<span className="font-medium underline-offset-4 hover:underline">
 												{lead.title || lead.identifier}
-											</Link>
+											</span>
 											<div className="mt-1 font-mono text-muted-foreground text-xs">
 												{lead.identifier}
 											</div>
@@ -180,6 +183,17 @@ function LeadList() {
 					</Button>
 				</div>
 			) : null}
+
+			<LeadDrawer
+				lead={selectedLead}
+				onLeadUpdated={() => {
+					// Convex reactivity refreshes the list; clear selection so
+					// the drawer re-reads the updated lead on next open.
+					setSelectedLead(null);
+				}}
+				onOpenChange={setDrawerOpen}
+				open={drawerOpen}
+			/>
 		</>
 	);
 }
