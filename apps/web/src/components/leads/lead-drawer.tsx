@@ -518,10 +518,12 @@ function ActionForm({
 	action,
 	leadId,
 	onDone,
+	onCancel,
 }: {
 	action: LeadAction;
 	leadId: string;
 	onDone: () => void;
+	onCancel: () => void;
 }) {
 	const dispatch = useMutation(api.catalog.dispatch);
 	const [values, setValues] = useState<Record<string, string>>({});
@@ -634,7 +636,7 @@ function ActionForm({
 				<Button disabled={submitting} size="sm" type="submit">
 					{submitting ? "Working…" : "Confirm"}
 				</Button>
-				<Button onClick={onDone} size="sm" type="button" variant="outline">
+				<Button onClick={onCancel} size="sm" type="button" variant="outline">
 					Cancel
 				</Button>
 			</div>
@@ -646,12 +648,10 @@ export function LeadDrawer({
 	lead,
 	open,
 	onOpenChange,
-	onLeadUpdated,
 }: {
 	lead: Lead | null;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	onLeadUpdated: () => void;
 }) {
 	const [activeAction, setActiveAction] = useState<LeadAction | null>(null);
 	const timeline = useQuery(
@@ -765,10 +765,8 @@ export function LeadDrawer({
 									<ActionForm
 										action={activeAction}
 										leadId={lead.identifier}
-										onDone={() => {
-											setActiveAction(null);
-											onLeadUpdated();
-										}}
+										onCancel={() => setActiveAction(null)}
+										onDone={() => setActiveAction(null)}
 									/>
 								) : (
 									<div className="flex flex-wrap gap-2">

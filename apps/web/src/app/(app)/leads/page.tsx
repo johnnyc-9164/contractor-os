@@ -50,7 +50,7 @@ function relativeDate(timestamp: number): string {
 function LeadList() {
 	const [cursor, setCursor] = useState<string | null>(null);
 	const [loadedLeads, setLoadedLeads] = useState<Lead[]>([]);
-	const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+	const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 	const [drawerOpen, setDrawerOpen] = useState(false);
 	const result = useQuery(api.backend.listLeads, {
 		paginationOpts: { numItems: 20, cursor },
@@ -68,6 +68,13 @@ function LeadList() {
 		});
 	}, [result]);
 
+	// Derive the selected lead from the reactive query result so the drawer
+	// always shows fresh data — actions refresh it with no manual reload
+	// and no selection clearing.
+	const selectedLead = selectedLeadId
+		? (loadedLeads.find((lead) => lead.identifier === selectedLeadId) ?? null)
+		: null;
+
 	const actorsByLead = useMemo(() => {
 		const actors = new Map<string, HistoryEvent>();
 		for (const event of (history?.page ?? []) as HistoryEvent[]) {
@@ -84,6 +91,11 @@ function LeadList() {
 		for (const lead of loadedLeads) counts[stageGroup(lead.state)] += 1;
 		return counts;
 	}, [loadedLeads]);
+
+	const openDrawerFor = (lead: Lead) => {
+		setSelectedLeadId(lead.identifier);
+		setDrawerOpen(true);
+	};
 
 	if (result === undefined && loadedLeads.length === 0) {
 		return (
@@ -134,15 +146,19 @@ function LeadList() {
 									<tr
 										className="cursor-pointer border-border border-b transition-colors hover:bg-muted/50"
 										key={lead.id}
-										onClick={() => {
-											setSelectedLead(lead);
-											setDrawerOpen(true);
-										}}
+										onClick={() => openDrawerFor(lead)}
 									>
 										<td className="px-6 py-4">
-											<span className="font-medium underline-offset-4 hover:underline">
+											<button
+												className="cursor-pointer text-left font-medium underline-offset-4 hover:underline"
+												onClick={(event) => {
+													event.stopPropagation();
+													openDrawerFor(lead);
+												}}
+												type="button"
+											>
 												{lead.title || lead.identifier}
-											</span>
+											</button>
 											<div className="mt-1 font-mono text-muted-foreground text-xs">
 												{lead.identifier}
 											</div>
@@ -186,11 +202,6 @@ function LeadList() {
 
 			<LeadDrawer
 				lead={selectedLead}
-				onLeadUpdated={() => {
-					// Convex reactivity refreshes the list; clear selection so
-					// the drawer re-reads the updated lead on next open.
-					setSelectedLead(null);
-				}}
 				onOpenChange={setDrawerOpen}
 				open={drawerOpen}
 			/>
