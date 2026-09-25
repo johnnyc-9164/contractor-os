@@ -24,12 +24,14 @@ jobs:
       - run: pnpm biome
       - run: pnpm test
 
-      # The production build needs real backend credentials (varlock
-      # validates them at build time). Until the three repo secrets below
-      # exist, this step skips gracefully so lint/type/test stay green.
-      # Add them under Settings > Secrets > Actions and the build lights up.
+      # The production build needs real backend credentials: providers.tsx
+      # constructs the Convex client at module scope, which throws during
+      # `next build` when NEXT_PUBLIC_CONVEX_URL is empty (pre-existing,
+      # unrelated to this PR). Until all three repo secrets exist, this step
+      # skips gracefully so lint/type/test stay green. Add them under
+      # Settings > Secrets > Actions and the build lights up automatically.
       - name: build (needs repo secrets)
-        if: ${{ secrets.NEXT_PUBLIC_CONVEX_URL != '' }}
+        if: ${{ secrets.NEXT_PUBLIC_CONVEX_URL != '' && secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' && secrets.CLERK_SECRET_KEY != '' }}
         run: pnpm build
         env:
           NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}

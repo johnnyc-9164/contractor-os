@@ -119,6 +119,7 @@ describe("operation-validators", () => {
 	it("invoiceBalanceResult accepts null and carries balance fields", () => {
 		const shape = invoiceBalanceResult as unknown as FieldValidator;
 		expect(shape.kind).toBe("union");
+		expect(shape.members?.some((m) => m.kind === "null")).toBe(true);
 		const obj = shape.members?.find((m) => m.kind === "object");
 		expect(obj).toBeDefined();
 		const fields = asObject(obj);
