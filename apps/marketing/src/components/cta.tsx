@@ -1,9 +1,7 @@
 import { Button } from "@contractor-os/ui/components/button";
 
-// PLACEHOLDER — replace with the real business number in a later copy contract
-const CALL_PHONE_DISPLAY = "(555) 010-0000";
-// PLACEHOLDER — replace with the real business number in a later copy contract
-const CALL_HREF = "tel:+15550100000";
+const CALL_PHONE_DISPLAY = "(651) 410-4196";
+const CALL_HREF = "tel:+16514104196";
 
 export function Cta() {
 	return (
@@ -16,7 +14,7 @@ export function Cta() {
 								Call for a free walkthrough
 							</h2>
 							<p className="mt-4 max-w-2xl text-background/70 leading-7">
-								Service-area details are pending approved business copy. Call to
+								Serving the Twin Cities from Inver Grove Heights. Call to
 								discuss the job and confirm availability.
 							</p>
 						</div>

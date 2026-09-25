@@ -1,9 +1,7 @@
 import { Button } from "@contractor-os/ui/components/button";
 
-// PLACEHOLDER — replace with the real business number in a later copy contract
-const CALL_PHONE_DISPLAY = "(555) 010-0000";
-// PLACEHOLDER — replace with the real business number in a later copy contract
-const CALL_HREF = "tel:+15550100000";
+const CALL_PHONE_DISPLAY = "(651) 410-4196";
+const CALL_HREF = "tel:+16514104196";
 
 export function Hero() {
 	return (
@@ -18,7 +16,7 @@ export function Hero() {
 					</h1>
 					<p className="mt-6 max-w-xl text-lg text-muted-foreground leading-8">
 						Keep leads, active jobs, and invoices moving from one practical work
-						surface. Final product copy is pending approval.
+						surface.
 					</p>
 					<div className="mt-8 flex flex-col gap-3 sm:flex-row">
 						<Button
@@ -39,8 +37,31 @@ export function Hero() {
 					</div>
 				</div>
 
-				<div className="flex aspect-video items-center justify-center rounded-2xl border border-border bg-muted p-8 text-center text-muted-foreground">
-					<p className="max-w-xs text-sm">Real job photography — placeholder</p>
+				<div
+					aria-label="How the work moves: lead to job to invoice"
+					className="rounded-2xl border border-border bg-muted p-8"
+					role="img"
+				>
+					<div className="flex flex-col gap-4">
+						<div className="flex items-center justify-between rounded-lg bg-background px-5 py-4">
+							<span className="font-medium">Lead</span>
+							<span className="rounded-full bg-foreground px-3 py-1 text-background text-xs">
+								New
+							</span>
+						</div>
+						<div className="flex items-center justify-between rounded-lg bg-background px-5 py-4">
+							<span className="font-medium">Job</span>
+							<span className="rounded-full bg-foreground px-3 py-1 text-background text-xs">
+								In progress
+							</span>
+						</div>
+						<div className="flex items-center justify-between rounded-lg bg-background px-5 py-4">
+							<span className="font-medium">Invoice</span>
+							<span className="rounded-full bg-foreground px-3 py-1 text-background text-xs">
+								Sent
+							</span>
+						</div>
+					</div>
 				</div>
 			</div>
 		</section>
