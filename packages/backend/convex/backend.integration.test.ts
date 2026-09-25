@@ -1,5 +1,3 @@
-/// <reference types="vite/client" />
-
 import contractorOsTest from "@johnnyc2026/contractor-os-core/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
@@ -120,7 +118,10 @@ describe("backend facade", () => {
 		) =>
 			authed.mutation(api.backend.execute, {
 				requestKey: `command-${++request}`,
-				command,
+				// Test helper constructs valid commands; bypass strict union type for the helper signature
+				command: command as unknown as Parameters<
+					typeof api.backend.execute
+				>[0]["command"],
 				...options,
 			});
 		const expected = (
