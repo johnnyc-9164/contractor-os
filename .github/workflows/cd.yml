@@ -86,3 +86,57 @@ jobs:
           done
           echo "timed out waiting for deployed SHA: observed $observed_sha, expected $GITHUB_SHA"
           exit 1
+
+  deploy-marketing:
+    # Independent of the Convex deploy: marketing is a static surface with no backend.
+    # Vercel project `contractor-os-marketing` exists (root: apps/marketing, default
+    # *.vercel.app domain, no custom domain per MASTER_BRIEF S58; SSO protection off;
+    # public env NEXT_PUBLIC_APP_URL=https://contractoros-ten.vercel.app).
+    # PENDING: git connection — the ItsHim Vercel team's GitHub integration cannot see
+    # johnnyc-9164/contractor-os (repo_not_found), so no deploy hook exists yet.
+    # Unblock: install/authorize the Vercel GitHub App on the johnnyc-9164 GitHub
+    # account (Johnny's browser action), then connect the repo and create the deploy
+    # hook; set repo secret VERCEL_MARKETING_DEPLOY_HOOK_URL + repo variable
+    # MARKETING_URL. Until then this job no-ops.
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_MARKETING_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_MARKETING_DEPLOY_HOOK_URL }}
+    steps:
+      - name: trigger Vercel marketing deploy
+        if: ${{ env.VERCEL_MARKETING_DEPLOY_HOOK_URL != '' }}
+        run: curl -sf -X POST "${{ secrets.VERCEL_MARKETING_DEPLOY_HOOK_URL }}"
+
+  smoke-marketing:
+    runs-on: ubuntu-latest
+    needs: [deploy-marketing]
+    env:
+      MARKETING_URL: ${{ vars.MARKETING_URL }}
+      NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+    steps:
+      - name: marketing homepage reachable and free of auth JS
+        if: ${{ env.MARKETING_URL != '' }}
+        run: |
+          for i in $(seq 1 30); do
+            if html=$(curl -sf "${{ vars.MARKETING_URL }}/"); then
+              echo "marketing homepage reachable (attempt $i)"
+              if grep -qiE "clerk|convex" <<< "$html"; then
+                echo "FAIL: clerk/convex references found in marketing homepage"
+                exit 1
+              fi
+              echo "no clerk/convex references in marketing homepage"
+              exit 0
+            fi
+            echo "attempt $i: not live yet, waiting 20s..."
+            sleep 20
+          done
+          echo "marketing homepage never became reachable"
+          exit 1
+      - name: app CTAs resolve (when configured)
+        if: ${{ vars.MARKETING_URL != '' && vars.NEXT_PUBLIC_APP_URL != '' }}
+        run: |
+          html=$(curl -sf "${{ vars.MARKETING_URL }}/")
+          if ! grep -qF "${{ vars.NEXT_PUBLIC_APP_URL }}" <<< "$html"; then
+            echo "FAIL: NEXT_PUBLIC_APP_URL not found in marketing homepage links"
+            exit 1
+          fi
+          echo "app URL present in marketing CTAs"
