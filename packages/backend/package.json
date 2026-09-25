@@ -10,6 +10,7 @@
 	"description": "",
 	"devDependencies": {
 		"@types/node": "catalog:",
+		"convex-test": "0.0.59",
 		"typescript": "catalog:",
 		"@contractor-os/config": "workspace:*"
 	},
