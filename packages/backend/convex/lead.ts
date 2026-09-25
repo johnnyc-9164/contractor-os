@@ -430,6 +430,11 @@ async function componentExpected(
 		blueprint,
 		identifier,
 	});
+	if (!record) {
+		throw new Error(
+			`componentExpected: no ${blueprint} record for identifier ${identifier}`,
+		);
+	}
 	return { blueprint, identifier, revision: record.revision };
 }
 
