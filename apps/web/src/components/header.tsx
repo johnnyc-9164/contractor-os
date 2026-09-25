@@ -14,12 +14,10 @@ export function canSeeAdminActions(role: MembershipRole | null): boolean {
 export default function Header() {
 	const { isSignedIn } = useAuth();
 	const membership = useQuery(api.memberships.get, isSignedIn ? {} : "skip");
-	const links: { to: Route; label: string }[] = [
-		{ to: "/", label: "Home" },
-		...(canSeeAdminActions(membership?.role ?? null)
-			? [{ to: "/dashboard", label: "Dashboard" }]
-			: []),
-	];
+	const links: { to: Route; label: string }[] = [{ to: "/", label: "Home" }];
+	if (canSeeAdminActions(membership?.role ?? null)) {
+		links.push({ to: "/dashboard", label: "Dashboard" });
+	}
 
 	return (
 		<div>
