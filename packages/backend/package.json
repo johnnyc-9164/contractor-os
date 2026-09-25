@@ -14,6 +14,8 @@
 		"@contractor-os/config": "workspace:*"
 	},
 	"dependencies": {
+		"@johnnyc2026/cms": "file:../../vendor/johnnyc2026-cms-0.2.0.tgz",
+		"@johnnyc2026/contractor-os-core": "file:../../vendor/johnnyc2026-contractor-os-core-0.5.1.tgz",
 		"zod": "catalog:",
 		"convex": "catalog:"
 	}
