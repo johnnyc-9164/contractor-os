@@ -169,6 +169,12 @@ importers:
 
   packages/backend:
     dependencies:
+      '@johnnyc2026/cms':
+        specifier: file:../../vendor/johnnyc2026-cms-0.2.0.tgz
+        version: file:vendor/johnnyc2026-cms-0.2.0.tgz(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))
+      '@johnnyc2026/contractor-os-core':
+        specifier: file:../../vendor/johnnyc2026-contractor-os-core-0.5.1.tgz
+        version: file:vendor/johnnyc2026-contractor-os-core-0.5.1.tgz(convex-helpers@0.1.124(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))(hono@4.13.8)(react@19.3.0)(typescript@6.0.3)(zod@4.6.5))(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))
       convex:
         specifier: 'catalog:'
         version: 1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
