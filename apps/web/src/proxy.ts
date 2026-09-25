@@ -1,11 +1,14 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 
 export function isProtectedRoute(pathname: string): boolean {
+	// NOTE: route groups like (app) never appear in real URL pathnames, so the
+	// guard must name the actual paths. /(app) entries below are dead and kept
+	// only as documentation of intent; /leads is the live (app) route.
 	return (
 		pathname === "/dashboard" ||
 		pathname.startsWith("/dashboard/") ||
-		pathname === "/(app)" ||
-		pathname.startsWith("/(app)/")
+		pathname === "/leads" ||
+		pathname.startsWith("/leads/")
 	);
 }
 
