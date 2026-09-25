@@ -9,6 +9,7 @@ overrides:
   "@next/env": npm:@varlock/nextjs-integration@1.2.2
 catalog:
   zod: ^4.5.4
+  vitest: ^5.0.1
   typescript: ^6.0.3
   "@types/node": ^26.4.1
   varlock: 1.18.0

@@ -22,7 +22,10 @@
 		"deploy:check": "vercel deploy --dry",
 		"env:generate": "varlock codegen --path ./apps/web/",
 		"postinstall": "varlock codegen --path ./apps/web/",
-		"check": "biome check --write ."
+		"check": "biome check --write .",
+		"biome": "biome check .",
+		"test": "vitest run",
+		"test:watch": "vitest"
 	},
 	"packageManager": "pnpm@11.25.0",
 	"dependencies": {
@@ -30,6 +33,7 @@
 	},
 	"devDependencies": {
 		"typescript": "catalog:",
+		"vitest": "catalog:",
 		"@types/node": "catalog:",
 		"@contractor-os/config": "workspace:*",
 		"varlock": "catalog:",
