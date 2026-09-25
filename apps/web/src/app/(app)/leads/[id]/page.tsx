@@ -122,7 +122,12 @@ function Detail() {
 						{record.identifier}
 					</p>
 				</div>
-				<UserButton />
+				<div className="flex items-center gap-3">
+					<Link href={`/quotes/new?lead_id=${encodeURIComponent(identifier)}`}>
+						<Button>New quote</Button>
+					</Link>
+					<UserButton />
+				</div>
 			</header>
 			<div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
 				<div className="space-y-6">
