@@ -637,6 +637,14 @@ export default defineSchema({
 		.index("by_key", ["key"])
 		.index("by_entity", ["entity_type", "entity_id"]),
 
+	// ── As-built amendment TC-BUILD-3: catalog dispatch idempotency ─────────
+	catalog_idempotency: defineTable({
+		key: v.string(),
+		contract: v.string(),
+		result: v.string(),
+		...provenance,
+	}).index("by_key", ["key"]),
+
 	// ── Cross-cutting: agents ──────────────────────────────────────────────
 	agents: defineTable({
 		...provenance,

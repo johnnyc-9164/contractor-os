@@ -61,6 +61,8 @@ const EXPECTED_TABLES = [
 	"contractorOsMemberships",
 	// TC-SEC-01: tenant-isolation mapping for the CMS facade
 	"cmsSiteTenants",
+	// TC-BUILD-3 as-built amendment: catalog dispatch idempotency table
+	"catalog_idempotency",
 ] as const;
 
 const PROVENANCE_FIELDS = [
