@@ -14,8 +14,12 @@ paths, which broke installs everywhere else, including CI).
 - `johnnyc2026-contractor-os-core-0.5.1.tgz` — built from the Contractor OS
   core factory package (`@johnnyc2026/contractor-os-core` 0.5.1), tsc clean.
 
-Both were staged at `~/workspace/npm-publish-prep/` on 2026-09-24 and are
-byte-identical to the versions the dev PC installed from `E:/Downloads/`.
+Both were staged at `~/workspace/npm-publish-prep/` on 2026-09-24, built from
+the same factory source as the versions the dev PC installed (same package
+names and versions, 0.2.0 / 0.5.1). The PC's original tarball files are not
+available for byte comparison, so identity is established by version +
+source provenance, and the lockfile's integrity hashes were independently
+recomputed from these tarball bytes during review.
 
 ## Migration
 
