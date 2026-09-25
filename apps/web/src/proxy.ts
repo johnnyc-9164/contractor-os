@@ -1,6 +1,17 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 
-export default clerkMiddleware();
+export function isProtectedRoute(pathname: string): boolean {
+	return (
+		pathname === "/dashboard" ||
+		pathname.startsWith("/dashboard/") ||
+		pathname === "/(app)" ||
+		pathname.startsWith("/(app)/")
+	);
+}
+
+export default clerkMiddleware(async (auth, request) => {
+	if (isProtectedRoute(request.nextUrl.pathname)) await auth.protect();
+});
 
 export const config = {
 	matcher: [

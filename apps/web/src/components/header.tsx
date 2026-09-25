@@ -1,11 +1,23 @@
 "use client";
+import { useAuth } from "@clerk/nextjs";
+import { api } from "@contractor-os/backend/convex/_generated/api";
+import { useQuery } from "convex/react";
 import Link from "next/link";
+import type { MembershipRole } from "./membership-provider";
 import { ModeToggle } from "./mode-toggle";
 
+export function canSeeAdminActions(role: MembershipRole | null): boolean {
+	return role === "operator" || role === "admin";
+}
+
 export default function Header() {
+	const { isSignedIn } = useAuth();
+	const membership = useQuery(api.memberships.get, isSignedIn ? {} : "skip");
 	const links = [
 		{ to: "/", label: "Home" },
-		{ to: "/dashboard", label: "Dashboard" },
+		...(canSeeAdminActions(membership?.role ?? null)
+			? [{ to: "/dashboard", label: "Dashboard" }]
+			: []),
 	] as const;
 
 	return (
