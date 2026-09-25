@@ -34,7 +34,7 @@ v0.5.1 — these tasks wire it up, secure it, and put real UI on it.
 | ID   | Title                                              | Deps      | Status     |
 |------|----------------------------------------------------|-----------|------------|
 | T1   | Unify Convex backend into packages/backend        | —         | IN_PROGRESS  |
-| T2   | Biome: zero errors, zero warnings                 | —         | IN_PROGRESS  |
+| T2   | Biome: zero errors, zero warnings                 | —         | REVIEW_READY |
 | T3   | Test harness (vitest) + CI workflow               | —         | IN_PROGRESS  |
 | T4   | Tenant/role enforcement in the domain facade       | T1        | UNCLAIMED  |
 | T5   | Leads pipeline UI                                  | T1        | UNCLAIMED  |
@@ -46,6 +46,15 @@ v0.5.1 — these tasks wire it up, secure it, and put real UI on it.
 | T11  | PWA verification (installable + offline)           | T12       | UNCLAIMED  |
 | T12  | Vercel Git connection (human-gated)                | —         | UNCLAIMED  |
 | T13  | Integration verification in preview                | T12       | UNCLAIMED  |
+| FIX  | Vendor @johnnyc2026 tarballs (unblock pnpm install)| —         | REVIEW_READY |
+
+> FIX (unplanned, 2026-09-25): `apps/web` depended on the two
+> `@johnnyc2026` packages via `file:E:/Downloads/*.tgz` (absolute Windows
+> paths) — `pnpm install` failed on every non-PC machine, blocking T1/T3
+> verification and CI. Fixed by vendoring the known-good tarballs under
+> `vendor/` with relative `file:` paths (PR #7, draft). Reversible when the
+> npm account clears publishing — see `vendor/README.md`. T2's draft PR is
+> #6 (baseline already Biome-clean, verified independently).
 
 ## Parallelism map
 
