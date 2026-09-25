@@ -43,6 +43,10 @@ Derived from [AUDIT.md](AUDIT.md). The private repository and baseline push are 
 - **Acceptance criteria:** Add a test script and automated coverage as part of the first feature; keep this gap documented until then.
 - **Verification:** Check the root `package.json` and run `pnpm test` after the first feature lands.
 
-## Stage 2 candidate
+## Cycle execution status
 
-Stage 1 exit gate is met: the plan is pushed, a cycle milestone exists, and every remaining plan item has an issue with acceptance criteria and verification commands. Stage 2 item 1 is the highest-leverage task. The user explicitly requested the Vercel connection and authorized granting the GitHub App access only to this repository. Browser installation is pending because the GitHub page opened under `mplsjohnnycage`; the user must switch to `johnnyc-9164` before installation can proceed. No production deployment is authorized.
+- Stage 1 exit gate is met: milestone [Ship Cycle 2026-09-24](https://github.com/johnnyc-9164/contractor-os/milestone/1) exists, and issues [#1](https://github.com/johnnyc-9164/contractor-os/issues/1)–[#4](https://github.com/johnnyc-9164/contractor-os/issues/4) contain acceptance criteria and verification.
+- Stages 2–4 are complete for issue #1 in [SPEC.md](SPEC.md), [TASKS.md](TASKS.md), and [CONTRACT.md](CONTRACT.md); the contract is linked from issue #1.
+- Stage 5 is in progress in draft [PR #5](https://github.com/johnnyc-9164/contractor-os/pull/5), targeting the repository's existing default branch `master`. It is not ready for review: GitHub reports no checks, and no Vercel Git connection or preview exists yet.
+- To continue Stage 5, the user must complete the open GitHub app installation flow while signed into `johnnyc-9164` and grant access only to `contractor-os`. The browser currently shows `mplsjohnnycage`; the agent will not enter account credentials.
+- No production deployment is authorized. Stages 6–7 must wait until the contract's preview and check evidence pass.

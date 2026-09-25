@@ -1,6 +1,6 @@
 # Current State Audit
 
-Audit date: 2026-09-24
+Audit date: 2026-09-25
 
 ## Repository state
 
@@ -62,4 +62,4 @@ Audit date: 2026-09-24
 
 ## Stage status
 
-Stage 0 is complete: audit exists, secret paths are excluded, baseline `7bac8d6` is pushed, and install/typecheck/Biome checks passed; tests remain an accepted missing-script gap. Stage 1 is complete: the private repository and origin exist, the plan is pushed, and milestone `Ship Cycle 2026-09-24` contains issues #1–#4. Stage 2–4 artifacts for issue #1 are written in `SPEC.md`, `TASKS.md`, and `CONTRACT.md`; the user's approval gate is cleared. Stage 5 is blocked until the user completes GitHub sign-in as `johnnyc-9164` in the open Vercel App install page. No PR, review, or merge exists.
+Stage 0 is complete: audit exists, secret paths are excluded, baseline `7bac8d6` is pushed, and install/typecheck/Biome checks passed; tests remain an accepted missing-script gap. Stage 1 is complete: the private repository and origin exist, the plan is pushed, and milestone `Ship Cycle 2026-09-24` contains issues #1–#4. Stage 2–4 artifacts for issue #1 are written in `SPEC.md`, `TASKS.md`, and `CONTRACT.md`, and linked from issue #1; the user's approval gate is cleared. Stage 5 has draft PR [#5](https://github.com/johnnyc-9164/contractor-os/pull/5) against default branch `master`. It is not ready for review: GitHub reports no checks, the Vercel GitHub App install is waiting for sign-in as `johnnyc-9164`, and there is no connected repository or preview evidence. Stage 6–7 have not started; no merge occurred.
