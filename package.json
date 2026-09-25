@@ -21,7 +21,6 @@
 		"deploy:prod": "vercel deploy --prod",
 		"deploy:check": "vercel deploy --dry",
 		"env:generate": "varlock codegen --path ./apps/web/",
-		"postinstall": "node scripts/postinstall.js",
 		"check": "biome check --write .",
 		"biome": "biome check .",
 		"test": "vitest run",
