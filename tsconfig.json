@@ -1,0 +1,3 @@
+{
+	"extends": "@contractor-os/config/tsconfig.base.json"
+}

@@ -1,0 +1,143 @@
+{
+	"version": 1,
+	"skills": {
+		"clerk": {
+			"source": "clerk/skills",
+			"sourceType": "github",
+			"skillPath": "skills/core/clerk/SKILL.md",
+			"computedHash": "31dde2e1c88bfc2af5a1c783eec6d64aaf554ed3bc71ad463b812f6b58c9de41"
+		},
+		"clerk-custom-ui": {
+			"source": "clerk/skills",
+			"sourceType": "github",
+			"skillPath": "skills/core/clerk-custom-ui/SKILL.md",
+			"computedHash": "27cea644237b0458967891474a3300d54cb4693bba19b964025c73a8ca035fb2"
+		},
+		"clerk-nextjs-patterns": {
+			"source": "clerk/skills",
+			"sourceType": "github",
+			"skillPath": "skills/frameworks/clerk-nextjs-patterns/SKILL.md",
+			"computedHash": "cdcb9f08d567058fca7563ad8c67a4a2a2f3b9f286294e1caeb1ea5407dfebc6"
+		},
+		"clerk-orgs": {
+			"source": "clerk/skills",
+			"sourceType": "github",
+			"skillPath": "skills/features/clerk-orgs/SKILL.md",
+			"computedHash": "9a0b1a6610d55eac087b6464c693a840d9f353add3b2e1e2e4693c28bcd1e7dd"
+		},
+		"clerk-setup": {
+			"source": "clerk/skills",
+			"sourceType": "github",
+			"skillPath": "skills/core/clerk-setup/SKILL.md",
+			"computedHash": "fe36756e99b2203ee18852c14763d6aee6fac53c2def5fba40e24a7a9f6fc775"
+		},
+		"clerk-testing": {
+			"source": "clerk/skills",
+			"sourceType": "github",
+			"skillPath": "skills/features/clerk-testing/SKILL.md",
+			"computedHash": "7a103e04442822f0e8e11184e11e92fea143723817dba8c5f06fd71dab86c4ad"
+		},
+		"clerk-webhooks": {
+			"source": "clerk/skills",
+			"sourceType": "github",
+			"skillPath": "skills/features/clerk-webhooks/SKILL.md",
+			"computedHash": "6acecf8a6a4a77294c87874bce189d311bce39ea28786a010d2769b922fbb8cc"
+		},
+		"convex": {
+			"source": "get-convex/agent-skills",
+			"sourceType": "github",
+			"skillPath": "skills/convex/SKILL.md",
+			"computedHash": "d8d267be1af449b19eaf05a7b1716ed903e1bc4de2e67a911f67859f341c5337"
+		},
+		"convex-best-practices": {
+			"source": "waynesutton/convexskills",
+			"sourceType": "github",
+			"skillPath": "skills/convex-best-practices/SKILL.md",
+			"computedHash": "1e0008cecaa0bca3b0e1aa8c31a7f59417907088cd9309402739e71f249287c2"
+		},
+		"convex-cron-jobs": {
+			"source": "waynesutton/convexskills",
+			"sourceType": "github",
+			"skillPath": "skills/convex-cron-jobs/SKILL.md",
+			"computedHash": "a5a20d9691efaf97a6b54da22514116533983e5db0a38a902c89526fa11be792"
+		},
+		"convex-file-storage": {
+			"source": "waynesutton/convexskills",
+			"sourceType": "github",
+			"skillPath": "skills/convex-file-storage/SKILL.md",
+			"computedHash": "e16eef2a7d57532ceeb4b696b072a3638b1c9e047544a1312796abd3554c3ac0"
+		},
+		"convex-functions": {
+			"source": "waynesutton/convexskills",
+			"sourceType": "github",
+			"skillPath": "skills/convex-functions/SKILL.md",
+			"computedHash": "0238fad9b9a141dc0fe75baf0eb937f650a9b7d1044e86dbd25f5da7c56cb027"
+		},
+		"convex-http-actions": {
+			"source": "waynesutton/convexskills",
+			"sourceType": "github",
+			"skillPath": "skills/convex-http-actions/SKILL.md",
+			"computedHash": "8eb466bc8f89d027b06dc26a935cf57398b5317fc742750e482965a17ab4801c"
+		},
+		"convex-migrations": {
+			"source": "waynesutton/convexskills",
+			"sourceType": "github",
+			"skillPath": "skills/convex-migrations/SKILL.md",
+			"computedHash": "4235e7f09a49d190c8d0cf6aec8c86778364363fd7b3fb4b94fb05ac0a2c7303"
+		},
+		"convex-realtime": {
+			"source": "waynesutton/convexskills",
+			"sourceType": "github",
+			"skillPath": "skills/convex-realtime/SKILL.md",
+			"computedHash": "72d0500e41f7f8a158c65a9873feef0eb57e93fbccd551f562e8a37117d3f5f1"
+		},
+		"convex-schema-validator": {
+			"source": "waynesutton/convexskills",
+			"sourceType": "github",
+			"skillPath": "skills/convex-schema-validator/SKILL.md",
+			"computedHash": "5ea368133caa4b5ff39b5c3f404de2c63501a03d3d2af3ec3e4cda2876ec7ecc"
+		},
+		"convex-security-check": {
+			"source": "waynesutton/convexskills",
+			"sourceType": "github",
+			"skillPath": "skills/convex-security-check/SKILL.md",
+			"computedHash": "229853d175a525e3a6304eeef51cb429c70586fb2f99283e4147505bbb848229"
+		},
+		"deploy-to-vercel": {
+			"source": "vercel-labs/agent-skills",
+			"sourceType": "github",
+			"skillPath": "skills/deploy-to-vercel/SKILL.md",
+			"computedHash": "3a0481591523c55ecfe2569b6b28b2dcbfa3742367667697219d29170981ad53"
+		},
+		"shadcn": {
+			"source": "shadcn/ui",
+			"sourceType": "github",
+			"skillPath": "skills/shadcn/SKILL.md",
+			"computedHash": "d04e43ec01e921558b93bb8046c14a42a22556689a2827243df900825a4e1604"
+		},
+		"turborepo": {
+			"source": "vercel/turborepo",
+			"sourceType": "github",
+			"skillPath": "skills/turborepo/SKILL.md",
+			"computedHash": "9ced49eba872730912bdccf6bf5bb621f6e1572ad3fef8c58cc2a1ae333775d9"
+		},
+		"vercel-composition-patterns": {
+			"source": "vercel-labs/agent-skills",
+			"sourceType": "github",
+			"skillPath": "skills/composition-patterns/SKILL.md",
+			"computedHash": "10eb4ec94577b79ae98c63ce3e7f35f8a6a06436a4011bff083b397de6960eeb"
+		},
+		"vercel-react-best-practices": {
+			"source": "vercel-labs/agent-skills",
+			"sourceType": "github",
+			"skillPath": "skills/react-best-practices/SKILL.md",
+			"computedHash": "6b526d013e28073246a36f99b529bc43745d30832ecfa8217b359c34f260ca6b"
+		},
+		"web-design-guidelines": {
+			"source": "vercel-labs/agent-skills",
+			"sourceType": "github",
+			"skillPath": "skills/web-design-guidelines/SKILL.md",
+			"computedHash": "d8e7d3afe37dcc8a97b99ffb5afdb4d0919ae0092ea8b68f44eb201f035e33ac"
+		}
+	}
+}

@@ -1,0 +1,42 @@
+{
+	"name": "contractor-os",
+	"private": true,
+	"type": "module",
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"scripts": {
+		"dev": "turbo run dev",
+		"build": "turbo run build",
+		"check-types": "turbo run check-types",
+		"dev:web": "turbo run dev -F web --",
+		"dev:server": "turbo run dev -F @contractor-os/backend --",
+		"dev:setup": "turbo run dev:setup -F @contractor-os/backend --",
+		"deploy:setup": "vercel link",
+		"dev:vercel": "vercel dev -L",
+		"env:preview": "tsx scripts/sync-vercel-env.ts preview",
+		"env:production": "tsx scripts/sync-vercel-env.ts production",
+		"deploy": "vercel deploy",
+		"deploy:prod": "vercel deploy --prod",
+		"deploy:check": "vercel deploy --dry",
+		"env:generate": "varlock codegen --path ./apps/web/",
+		"postinstall": "varlock codegen --path ./apps/web/",
+		"check": "biome check --write ."
+	},
+	"packageManager": "pnpm@11.25.0",
+	"dependencies": {
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"typescript": "catalog:",
+		"@types/node": "catalog:",
+		"@contractor-os/config": "workspace:*",
+		"varlock": "catalog:",
+		"tsx": "^4.23.13",
+		"vercel": "^59.11.7",
+		"turbo": "^2.10.12",
+		"@biomejs/biome": "^2.5.12",
+		"lefthook": "^2.1.12"
+	}
+}

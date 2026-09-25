@@ -1,0 +1,37 @@
+// Better-T-Stack project metadata
+//
+// Keep this file to use the `add` command.
+// Add addons: pnpm dlx create-better-t-stack@latest add
+//
+// Docs: https://better-t-stack.dev/docs
+// Stack Builder: https://better-t-stack.dev/new
+
+{
+  "$schema": "https://r2.better-t-stack.dev/schema.json",
+  "version": "3.44.1",
+  "createdAt": "2026-09-24T22:27:13.382Z",
+  "reproducibleCommand": "pnpm create better-t-stack@latest . --frontend next --backend convex --runtime none --database none --orm none --api none --auth clerk --payments none --addons biome lefthook mcp pwa skills turborepo --examples none --db-setup none --web-deploy vercel --server-deploy none --git --package-manager pnpm --install",
+  "database": "none",
+  "orm": "none",
+  "backend": "convex",
+  "runtime": "none",
+  "frontend": [
+    "next"
+  ],
+  "addons": [
+    "biome",
+    "lefthook",
+    "mcp",
+    "pwa",
+    "skills",
+    "turborepo"
+  ],
+  "examples": [],
+  "auth": "clerk",
+  "payments": "none",
+  "packageManager": "pnpm",
+  "dbSetup": "none",
+  "api": "none",
+  "webDeploy": "vercel",
+  "serverDeploy": "none"
+}
