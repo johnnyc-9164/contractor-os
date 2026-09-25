@@ -65,3 +65,24 @@ jobs:
           done
           echo "production homepage never became reachable"
           exit 1
+      - name: verify deployed commit and Convex health
+        run: |
+          observed_sha="<unreachable>"
+          for i in $(seq 1 30); do
+            if response=$(curl -sf https://contractoros-ten.vercel.app/api/health); then
+              observed_sha=$(jq -r '.sha // "<missing>"' <<< "$response")
+              if [ "$observed_sha" = "$GITHUB_SHA" ]; then
+                convex=$(jq -r '.convex // "<missing>"' <<< "$response")
+                if [ "$convex" != "ok" ]; then
+                  echo "deployed commit $GITHUB_SHA is live, but Convex health is $convex"
+                  exit 1
+                fi
+                echo "deployed commit $GITHUB_SHA is live and Convex is healthy (attempt $i)"
+                exit 0
+              fi
+            fi
+            echo "attempt $i: observed SHA $observed_sha, expected $GITHUB_SHA; waiting 20s..."
+            sleep 20
+          done
+          echo "timed out waiting for deployed SHA: observed $observed_sha, expected $GITHUB_SHA"
+          exit 1
