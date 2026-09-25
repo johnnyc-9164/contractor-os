@@ -35,7 +35,7 @@ v0.5.1 — these tasks wire it up, secure it, and put real UI on it.
 |------|----------------------------------------------------|-----------|------------|
 | T1   | Unify Convex backend into packages/backend        | —         | REVIEW_READY |
 | T2   | Biome: zero errors, zero warnings                 | —         | REVIEW_READY |
-| T3   | Test harness (vitest) + CI workflow               | —         | IN_PROGRESS  |
+| T3   | Test harness (vitest) + CI workflow               | —         | REVIEW_READY |
 | T4   | Tenant/role enforcement in the domain facade       | T1        | UNCLAIMED  |
 | T5   | Leads pipeline UI                                  | T1        | UNCLAIMED  |
 | T6   | Bids & proposals UI                                | T1        | UNCLAIMED  |
@@ -56,6 +56,8 @@ v0.5.1 — these tasks wire it up, secure it, and put real UI on it.
 > npm account clears publishing — see `vendor/README.md`. T2's draft PR is
 > #6 (baseline already Biome-clean, verified independently).
 > T1's draft PR is #9 (rebased onto #7; all 8 contract verifications pass).
+> T3's draft PR is #8 (20/20 tests pass, rebased onto #7; CI build step
+> conditional on repo secrets — needs 3 secrets from the human to activate).
 
 ## Parallelism map
 
