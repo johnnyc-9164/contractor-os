@@ -1,47 +1,97 @@
-<!-- graft:start -->
-## Graft — repo context graph
+# Contractor OS — facts
 
-This repo is indexed in `graft/`: small linked markdown nodes that explain each
-system and carry exact file:line spans, kept in sync with the code through git.
+> This file is **facts**: what this repository is. Verifiable layout, commands,
+> modules, APIs, and conventions. How we work lives in `CLAUDE.md`;
+> product/experience design lives in `DESIGN.md`.
 
-For ANY task here — understanding how something works, finding where code lives,
-or scoping a change — get context from the graph before grepping or opening
-source files. Re-ask freely (it's cheap) and reuse literal identifiers you
-already have (symbol, error string, file name) as the query. New to this repo?
-Run `graft map` first — a token-budgeted orientation (dir clusters, hubs,
-hotspots), no LLM, no key.
+## Project overview
 
-- Run `graft ask "<your question>" --source` → ranked nodes with the relevant
-  code spans inlined (each hit's ≤8-line crux by default; `--full` for whole
-  definitions when the crux isn't enough). Match the tool to the task shape:
-  for understanding or editing, the top node IS the answer — cite its
-  `covers:` file:line spans and edit straight from `--source`. For
-  exhaustive tasks ("every occurrence / every caller of this pattern"), ranked
-  results are top-N, not complete — run `graft grep "<literal>"` instead
-  (exhaustive over indexed files, grouped by enclosing symbol), falling back
-  to raw `grep -rn` only for unindexed files.
-- `graft skeleton <file>` → every definition's signature + span, ~10× cheaper
-  than reading the file; use it to skim an API surface.
-- `graft callers <symbol>` gives precomputed, exact edges — who calls this.
-  Add `--direction out` for what it calls, or `--depth N` to walk
-  transitively for the full blast radius. For structural questions, skip
-  ranking and use this directly.
-- Or browse: `graft/INDEX.md` lists every node; follow the links.
-- Monorepos and folders of multiple repos rank fairly across sub-projects —
-  hits carry `[scope/]` labels naming which one they're from. Narrow with
-  `graft ask "<task>" --in <scope>/` once you know where you're working.
+Contractor OS: an operating system for a contracting business — leads → jobs
+→ invoices. Monorepo (pnpm workspaces + turbo): Next.js 16 frontend
+(`apps/web`), Convex backend (`packages/backend`), shared UI (`packages/ui`).
 
-If a returned span is truncated ("+N more lines"), open the file at that exact
-range before finalizing. Only open source files when a node genuinely lacks a
-needed detail, and then at the exact file:line the node points to — never
-re-read whole files.
+## Entry docs
 
-After big code changes, refresh the graph with `graft build` (deterministic,
-no API key, $0).
-<!-- graft:end -->
+- `AGENTS.md` (this file) — facts
+- `CLAUDE.md` — protocol: decision priority, gates, collaboration
+- `DESIGN.md` — experience design: what the product should feel like
+- Scoped facts: `apps/web/AGENTS.md`, `apps/web/src/app/AGENTS.md`,
+  `apps/web/src/components/AGENTS.md`, `apps/web/src/lib/AGENTS.md`,
+  `packages/backend/AGENTS.md`, `packages/ui/AGENTS.md`,
+  `packages/config/AGENTS.md`, `scripts/AGENTS.md`
+- No `steering/` overrides exist. `docs/` does not exist; human long-form
+  background is not AI truth.
 
-## Current third-party documentation
+## Workspace layout
 
-- Use the Context7 MCP when current library or framework documentation would help answer an implementation question.
-- Resolve the package or product to its exact Context7 library ID first, then query that ID with one focused question. Use the version installed by this repo when Context7 provides a matching version.
-- Never include credentials, personal data, or proprietary code in Context7 queries. Treat returned docs as upstream guidance and verify examples against this repo's code and dependency versions.
+- `apps/web` — Next.js 16 App Router frontend (Clerk auth, Tailwind, shadcn/ui)
+- `packages/backend` — Convex functions; thin facade over the vendored
+  `@johnnyc2026/contractor-os-core` component (107 live functions: 20 record
+  types × CRUD, 15 workflows, 6 operations)
+- `packages/ui` — shared React components, hooks, styles (shadcn/ui based)
+- `packages/config` — shared `tsconfig.base.json`
+- `scripts/` — ops scripts (`sync-vercel-env.ts`)
+- `vendor/` — vendored tarballs (TEMPORARY; npm publish blocked — see
+  `vendor/README.md`)
+- `graft/` — repo context graph (see Orientation)
+
+## Key technologies
+
+- Languages: TypeScript. Runtimes: Node 22 (CI), Bun not used.
+- Frameworks: Next.js 16 (App Router), React 19, Convex, Tailwind CSS v4.
+- Auth: Clerk (`src/proxy.ts` runs `clerkMiddleware`); Convex via the Clerk
+  **"convex" JWT template** (`convex/auth.config.ts`).
+- Package manager: pnpm (workspace). Validation: Zod. Lint/format: Biome.
+  Tests: Vitest. Git hooks: lefthook.
+
+## Commands (repo root)
+
+| Task | Command |
+| --- | --- |
+| Install | `pnpm install` (operator shell only — the Codex sandbox cannot; SQLite store EPERM) |
+| Typecheck (web) | `pnpm --filter web exec tsc --noEmit` |
+| Lint | `pnpm --filter web exec biome check src` |
+| Tests (web) | `pnpm --filter web exec vitest run` |
+| Production build (web) | `pnpm --filter web build` — the authoritative gate; `tsc` does not catch typed-routes errors |
+| Convex codegen | `convex dev` / `convex codegen` (never edit `convex/_generated/`) |
+
+CI (`.github/workflows/`): `ci.yml` runs typecheck, lint, test, build on every
+PR. `cd.yml` runs on push to `master`: Convex production deploy → Vercel
+deploy hook → smoke (homepage reachable, then `/api/health` polled until
+observed SHA equals `GITHUB_SHA` and Convex reports healthy).
+
+## Key modules and APIs
+
+- `apps/web/src/app/dashboard/` — auth-gated dashboard; live leads/jobs from
+  `api.backend.listLeads` / `listJobs`
+- `apps/web/src/app/api/health/route.ts` — `GET` → `{ sha, convex, ts }`;
+  `sha` is `VERCEL_GIT_COMMIT_SHA`, `convex` is a live `healthCheck` query.
+  `force-dynamic`. Polled by the CD smoke step.
+- `apps/web/src/components/` — `CreateLeadForm` → `co_create_lead`,
+  `CreateJobForm` → `co_create_job`, `CreateInvoiceForm` → `co_create_invoice`
+- `packages/backend/convex/schema.ts` — domain schema (backend crew file claim)
+- `packages/backend/convex/cms.ts` — CMS mount; **known tenant-isolation hole**
+  (any authenticated user can touch any site) — tracked, do not paper over in
+  the frontend
+- Production: `https://contractoros-ten.vercel.app`, Convex `posh-cobra-868`
+
+## Conventions (facts, not philosophy)
+
+- Typed routes are strict: `Link` `to` must stay in the generated `Route`
+  union. Conditional spreads widen it to `string` silently — build link arrays
+  imperatively or annotate. Only the production build catches this.
+- No emoji in UI, code, or markup (see `DESIGN.md` for the voice rules).
+- `pnpm install` and all git writes happen in an operator shell, never in a
+  Codex sandbox (read-only git metadata, no pnpm).
+- One git worktree per worker; no two active branches modify the same file
+  (claims registered in the command log).
+
+## Orientation
+
+For ANY task — understanding, locating code, scoping a change — query the
+repo graph before grepping: `graft ask "<question>" --source` (ranked nodes
+with code spans; top node is the answer for understand/edit tasks),
+`graft grep "<literal>"` for exhaustive searches, `graft map` for cold
+orientation. For current library docs use the Context7 MCP: resolve the exact
+library ID first, verify examples against installed versions, never send
+credentials or proprietary code.
