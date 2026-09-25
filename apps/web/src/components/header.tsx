@@ -2,6 +2,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { api } from "@contractor-os/backend/convex/_generated/api";
 import { useQuery } from "convex/react";
+import type { Route } from "next";
 import Link from "next/link";
 import type { MembershipRole } from "./membership-provider";
 import { ModeToggle } from "./mode-toggle";
@@ -13,12 +14,12 @@ export function canSeeAdminActions(role: MembershipRole | null): boolean {
 export default function Header() {
 	const { isSignedIn } = useAuth();
 	const membership = useQuery(api.memberships.get, isSignedIn ? {} : "skip");
-	const links = [
+	const links: { to: Route; label: string }[] = [
 		{ to: "/", label: "Home" },
 		...(canSeeAdminActions(membership?.role ?? null)
 			? [{ to: "/dashboard", label: "Dashboard" }]
 			: []),
-	] as const;
+	];
 
 	return (
 		<div>
