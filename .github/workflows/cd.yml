@@ -53,10 +53,15 @@ jobs:
     runs-on: ubuntu-latest
     needs: [deploy-vercel]
     steps:
-      - name: wait for Vercel deploy to go live
-        run: sleep 60
-
-      - name: production health check
+      - name: production health check (poll until live)
         run: |
-          curl -sf https://contractoros-johnnyc.vercel.app/ > /dev/null
-          echo "production homepage reachable"
+          for i in $(seq 1 30); do
+            if curl -sf https://contractoros-johnnyc.vercel.app/ > /dev/null; then
+              echo "production homepage reachable (attempt $i)"
+              exit 0
+            fi
+            echo "attempt $i: not live yet, waiting 20s..."
+            sleep 20
+          done
+          echo "production homepage never became reachable"
+          exit 1
