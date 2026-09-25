@@ -8,6 +8,7 @@ import {
 	Unauthenticated,
 	useQuery,
 } from "convex/react";
+import { CreateInvoiceForm } from "../../components/CreateInvoiceForm";
 import { CreateJobForm } from "../../components/CreateJobForm";
 import { CreateLeadForm } from "../../components/CreateLeadForm";
 
@@ -140,6 +141,18 @@ export default function Dashboard() {
 						}}
 					>
 						<CreateJobForm />
+					</section>
+
+					<section
+						style={{
+							border: "1px solid #e5e5e5",
+							borderRadius: "8px",
+							padding: "1.5rem",
+							marginTop: "2rem",
+							maxWidth: "600px",
+						}}
+					>
+						<CreateInvoiceForm />
 					</section>
 				</div>
 			</Authenticated>
