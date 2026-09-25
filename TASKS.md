@@ -33,9 +33,9 @@ v0.5.1 — these tasks wire it up, secure it, and put real UI on it.
 
 | ID   | Title                                              | Deps      | Status     |
 |------|----------------------------------------------------|-----------|------------|
-| T1   | Unify Convex backend into packages/backend        | —         | UNCLAIMED  |
-| T2   | Biome: zero errors, zero warnings                 | —         | UNCLAIMED  |
-| T3   | Test harness (vitest) + CI workflow               | —         | UNCLAIMED  |
+| T1   | Unify Convex backend into packages/backend        | —         | IN_PROGRESS  |
+| T2   | Biome: zero errors, zero warnings                 | —         | IN_PROGRESS  |
+| T3   | Test harness (vitest) + CI workflow               | —         | IN_PROGRESS  |
 | T4   | Tenant/role enforcement in the domain facade       | T1        | UNCLAIMED  |
 | T5   | Leads pipeline UI                                  | T1        | UNCLAIMED  |
 | T6   | Bids & proposals UI                                | T1        | UNCLAIMED  |
