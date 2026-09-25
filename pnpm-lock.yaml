@@ -94,6 +94,43 @@ importers:
         specifier: 'catalog:'
         version: 5.0.1(@edge-runtime/vm@3.2.0)(@types/node@26.6.2)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
+  apps/marketing:
+    dependencies:
+      '@contractor-os/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      next:
+        specifier: ^16.3.4
+        version: 16.3.6(@babel/core@7.29.7)(@types/node@26.6.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(varlock@1.18.0)
+      react:
+        specifier: 'catalog:'
+        version: 19.3.0
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.0(react@19.3.0)
+      tailwindcss:
+        specifier: 'catalog:'
+        version: 4.3.3
+    devDependencies:
+      '@contractor-os/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@tailwindcss/postcss':
+        specifier: 'catalog:'
+        version: 4.3.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.2
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+
   apps/web:
     dependencies:
       '@clerk/nextjs':
