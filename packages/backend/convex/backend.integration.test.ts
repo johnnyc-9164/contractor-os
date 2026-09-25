@@ -113,15 +113,13 @@ describe("backend facade", () => {
 		const authed = await enableAdmin(t);
 		let request = 0;
 		const execute = (
-			command: { kind: string; input: Record<string, unknown> },
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			command: any,
 			options = {},
 		) =>
 			authed.mutation(api.backend.execute, {
 				requestKey: `command-${++request}`,
-				// Test helper constructs valid commands; bypass strict union type for the helper signature
-				command: command as unknown as Parameters<
-					typeof api.backend.execute
-				>[0]["command"],
+				command,
 				...options,
 			});
 		const expected = (
