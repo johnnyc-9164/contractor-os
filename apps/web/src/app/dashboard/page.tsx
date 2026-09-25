@@ -8,6 +8,7 @@ import {
 	Unauthenticated,
 	useQuery,
 } from "convex/react";
+import { CreateJobForm } from "../../components/CreateJobForm";
 import { CreateLeadForm } from "../../components/CreateLeadForm";
 
 function LeadsList() {
@@ -127,6 +128,18 @@ export default function Dashboard() {
 						}}
 					>
 						<CreateLeadForm />
+					</section>
+
+					<section
+						style={{
+							border: "1px solid #e5e5e5",
+							borderRadius: "8px",
+							padding: "1.5rem",
+							marginTop: "2rem",
+							maxWidth: "600px",
+						}}
+					>
+						<CreateJobForm />
 					</section>
 				</div>
 			</Authenticated>
