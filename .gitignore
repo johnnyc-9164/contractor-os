@@ -55,6 +55,9 @@ coverage
 
 # Misc
 *.tgz
+# Exception: vendored @johnnyc2026 tarballs are intentionally tracked
+# (temporary until the packages publish to the npm registry)
+!vendor/*.tgz
 .cache
 tmp
 temp
