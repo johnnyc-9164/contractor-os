@@ -194,6 +194,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.2
+      convex-test:
+        specifier: 0.0.59
+        version: 0.0.59(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -2429,6 +2432,11 @@ packages:
         optional: true
       zod:
         optional: true
+
+  convex-test@0.0.59:
+    resolution: {integrity: sha512-2bxjk245RmF3RxrsDR86vbPCzGRnEmpqHbjVbs6bSupt18JadtvOR7Lao2+GcdYJIzny499aloDysYnoFPWP4A==}
+    peerDependencies:
+      convex: ^1.43.0
 
   convex@1.46.0:
     resolution: {integrity: sha512-dhBwDQTZDOhi5SUGAX17EWNehCdNq6/UFrSL0eLZuGfMkdsQbCVWVRZCzbZ5CF+/pgvoGxtApbEoTSipqL4JTw==}
@@ -6223,6 +6231,10 @@ snapshots:
       react: 19.3.0
       typescript: 6.0.3
       zod: 4.6.5
+
+  convex-test@0.0.59(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)):
+    dependencies:
+      convex: 1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
 
   convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0):
     dependencies:
