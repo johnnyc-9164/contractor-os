@@ -33,7 +33,7 @@ v0.5.1 — these tasks wire it up, secure it, and put real UI on it.
 
 | ID   | Title                                              | Deps      | Status     |
 |------|----------------------------------------------------|-----------|------------|
-| T1   | Unify Convex backend into packages/backend        | —         | IN_PROGRESS  |
+| T1   | Unify Convex backend into packages/backend        | —         | REVIEW_READY |
 | T2   | Biome: zero errors, zero warnings                 | —         | REVIEW_READY |
 | T3   | Test harness (vitest) + CI workflow               | —         | IN_PROGRESS  |
 | T4   | Tenant/role enforcement in the domain facade       | T1        | UNCLAIMED  |
@@ -55,6 +55,7 @@ v0.5.1 — these tasks wire it up, secure it, and put real UI on it.
 > `vendor/` with relative `file:` paths (PR #7, draft). Reversible when the
 > npm account clears publishing — see `vendor/README.md`. T2's draft PR is
 > #6 (baseline already Biome-clean, verified independently).
+> T1's draft PR is #9 (rebased onto #7; all 8 contract verifications pass).
 
 ## Parallelism map
 
