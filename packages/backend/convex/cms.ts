@@ -22,16 +22,35 @@ import { Cms } from "@johnnyc2026/cms";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 
 const cms = new Cms(components.cms);
 
-async function requireIdentity(ctx: {
-	auth: { getUserIdentity: () => Promise<{ subject: string } | null> };
-}) {
+async function requireTenant(ctx: QueryCtx | MutationCtx) {
 	const identity = await ctx.auth.getUserIdentity();
 	if (!identity) throw new Error("unauthenticated");
-	return identity;
+	const membership = await ctx.db
+		.query("contractorOsMemberships")
+		.withIndex("by_identity", (q) =>
+			q.eq("tokenIdentifier", identity.tokenIdentifier),
+		)
+		.unique();
+	if (!membership?.enabled) throw new Error("tenant access denied");
+	return membership.tenantId;
+}
+
+async function requireSiteTenant(
+	ctx: QueryCtx | MutationCtx,
+	siteIdentifier: string,
+	tenantId: string,
+) {
+	const mapping = await ctx.db
+		.query("cmsSiteTenants")
+		.withIndex("by_site", (q) => q.eq("siteIdentifier", siteIdentifier))
+		.unique();
+	if (!mapping) throw new Error(`unmapped CMS site: ${siteIdentifier}`);
+	if (mapping.tenantId !== tenantId) throw new Error("tenant access denied");
 }
 
 // Args below mirror the component's validators explicitly. For full strictness,
@@ -46,16 +65,39 @@ export const createSite = mutation({
 		idempotencyKey: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		await requireIdentity(ctx);
+		const tenantId = await requireTenant(ctx);
 		// returns the new record id as an opaque string
-		return await cms.site.create(ctx, args);
+		const id = await cms.site.create(ctx, args);
+		const mapping = await ctx.db
+			.query("cmsSiteTenants")
+			.withIndex("by_site", (q) => q.eq("siteIdentifier", args.identifier))
+			.unique();
+		if (mapping && mapping.tenantId !== tenantId) {
+			throw new Error("tenant access denied");
+		}
+		if (!mapping) {
+			const now = new Date().toISOString();
+			await ctx.db.insert("cmsSiteTenants", {
+				siteIdentifier: args.identifier,
+				tenantId,
+				created_by: "system",
+				created_at: now,
+				updated_by: "system",
+				updated_at: now,
+				source: "cms_facade",
+				schema_version: 1,
+				company_id: "co_skys",
+			});
+		}
+		return id;
 	},
 });
 
 export const getSite = query({
 	args: { identifier: v.string() },
 	handler: async (ctx, args) => {
-		await requireIdentity(ctx);
+		const tenantId = await requireTenant(ctx);
+		await requireSiteTenant(ctx, args.identifier, tenantId);
 		return await cms.site.get(ctx, args);
 	},
 });
@@ -63,8 +105,19 @@ export const getSite = query({
 export const listSites = query({
 	args: { paginationOpts: paginationOptsValidator },
 	handler: async (ctx, args) => {
-		await requireIdentity(ctx);
-		return await cms.site.list(ctx, args);
+		const tenantId = await requireTenant(ctx);
+		const mappings = await ctx.db
+			.query("cmsSiteTenants")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.collect();
+		const identifiers = new Set(mappings.map((row) => row.siteIdentifier));
+		const result = await cms.site.list(ctx, args);
+		// Filtering happens after component pagination, so a page may contain fewer
+		// than numItems and callers may need to continue to find more tenant sites.
+		return {
+			...result,
+			page: result.page.filter((site) => identifiers.has(site.identifier)),
+		};
 	},
 });
 
@@ -77,7 +130,8 @@ export const updateSite = mutation({
 		relations: v.optional(v.any()),
 	},
 	handler: async (ctx, args) => {
-		await requireIdentity(ctx);
+		const tenantId = await requireTenant(ctx);
+		await requireSiteTenant(ctx, args.identifier, tenantId);
 		// optimistic concurrency: throws on revision conflict
 		return await cms.site.update(ctx, args);
 	},

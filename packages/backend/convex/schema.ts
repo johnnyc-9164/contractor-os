@@ -37,6 +37,14 @@ export default defineSchema({
 		),
 	}).index("by_identity", ["tokenIdentifier"]),
 
+	cmsSiteTenants: defineTable({
+		...provenance,
+		siteIdentifier: v.string(),
+		tenantId: v.string(),
+	})
+		.index("by_site", ["siteIdentifier"])
+		.index("by_tenant", ["tenantId"]),
+
 	// ── Entity 1: Opportunity ──────────────────────────────────────────────
 	opportunities: defineTable({
 		...provenance,

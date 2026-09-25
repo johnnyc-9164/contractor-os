@@ -59,6 +59,8 @@ const EXPECTED_TABLES = [
 	"export_runs",
 	// preserved
 	"contractorOsMemberships",
+	// TC-SEC-01: tenant-isolation mapping for the CMS facade
+	"cmsSiteTenants",
 ] as const;
 
 const PROVENANCE_FIELDS = [
@@ -72,11 +74,14 @@ const PROVENANCE_FIELDS = [
 	"company_id",
 ] as const;
 
-// Every table except assembly_usages (no PK prefix per §22.1) and the
-// preserved contractorOsMemberships carries key + by_key.
+// Every table except assembly_usages (no PK prefix per §22.1), the
+// preserved contractorOsMemberships, and cmsSiteTenants (TC-SEC-01 mapping
+// table: siteIdentifier + by_site/by_tenant, no business key) carries key +
+// by_key.
 const TABLES_WITHOUT_BUSINESS_KEY = new Set([
 	"assembly_usages",
 	"contractorOsMemberships",
+	"cmsSiteTenants",
 ]);
 
 function tableNames(): string[] {
