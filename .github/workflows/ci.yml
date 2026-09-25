@@ -3,9 +3,15 @@ name: ci
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref so rapid pushes never pile up.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,19 +27,69 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm check-types
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
       - run: pnpm biome
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
       - run: pnpm test
+
+  build:
+    runs-on: ubuntu-latest
+    # Secrets cannot be referenced in `if:` conditions (GitHub rejects the
+    # whole workflow file at parse time with "Unrecognized named-value:
+    # 'secrets'"). Map them to env first, then gate the build step on env —
+    # the supported pattern.
+    env:
+      NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
 
       # The production build needs real backend credentials: providers.tsx
       # constructs the Convex client at module scope, which throws during
-      # `next build` when NEXT_PUBLIC_CONVEX_URL is empty (pre-existing,
-      # unrelated to this PR). Until all three repo secrets exist, this step
-      # skips gracefully so lint/type/test stay green. Add them under
-      # Settings > Secrets > Actions and the build lights up automatically.
-      - name: build (needs repo secrets)
-        if: ${{ secrets.NEXT_PUBLIC_CONVEX_URL != '' && secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' && secrets.CLERK_SECRET_KEY != '' }}
+      # `next build` when NEXT_PUBLIC_CONVEX_URL is empty. Skips gracefully
+      # on forks / PRs where repo secrets are not available.
+      - name: build
+        if: ${{ env.NEXT_PUBLIC_CONVEX_URL != '' && env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' && env.CLERK_SECRET_KEY != '' }}
         run: pnpm build
-        env:
-          NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
