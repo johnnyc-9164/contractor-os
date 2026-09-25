@@ -89,12 +89,15 @@ jobs:
 
   deploy-marketing:
     # Independent of the Convex deploy: marketing is a static surface with no backend.
-    # Owner-gated: the Vercel project `contractor-os-marketing` (root: apps/marketing,
-    # default *.vercel.app domain, no custom domain per MASTER_BRIEF S58) does not exist
-    # yet. Johnny creates it, then sets the repo secret VERCEL_MARKETING_DEPLOY_HOOK_URL
-    # and the repo variable MARKETING_URL. Until then this job no-ops.
-    # The Vercel project also needs the public env var NEXT_PUBLIC_APP_URL (the app URL,
-    # e.g. https://contractoros-ten.vercel.app) so marketing CTAs link back to the app.
+    # Vercel project `contractor-os-marketing` exists (root: apps/marketing, default
+    # *.vercel.app domain, no custom domain per MASTER_BRIEF S58; SSO protection off;
+    # public env NEXT_PUBLIC_APP_URL=https://contractoros-ten.vercel.app).
+    # PENDING: git connection — the ItsHim Vercel team's GitHub integration cannot see
+    # johnnyc-9164/contractor-os (repo_not_found), so no deploy hook exists yet.
+    # Unblock: install/authorize the Vercel GitHub App on the johnnyc-9164 GitHub
+    # account (Johnny's browser action), then connect the repo and create the deploy
+    # hook; set repo secret VERCEL_MARKETING_DEPLOY_HOOK_URL + repo variable
+    # MARKETING_URL. Until then this job no-ops.
     runs-on: ubuntu-latest
     env:
       VERCEL_MARKETING_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_MARKETING_DEPLOY_HOOK_URL }}
