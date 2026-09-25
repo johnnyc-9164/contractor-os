@@ -3,7 +3,9 @@
 	"version": "1.0.0",
 	"scripts": {
 		"dev": "convex dev",
-		"dev:setup": "convex dev --configure --until-success"
+		"dev:setup": "convex dev --configure --until-success",
+		"demo:seed": "convex run demo:seed --args '{\"confirmation\":\"I_UNDERSTAND_THIS_WRITES_DEMO_DATA\"}'",
+		"demo:reset": "convex run demo:reset --args '{\"confirmation\":\"I_UNDERSTAND_THIS_WRITES_DEMO_DATA\"}'"
 	},
 	"author": "",
 	"license": "ISC",
