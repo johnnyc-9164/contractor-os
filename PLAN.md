@@ -1,6 +1,6 @@
 # Ship Cycle Plan
 
-Derived from [AUDIT.md](AUDIT.md). The private repository and baseline push are complete; the remaining work is tracked under the current cycle milestone after Stage 1 is recorded.
+Derived from [AUDIT.md](AUDIT.md). The private repository and baseline push are complete. Stage 1 is recorded under milestone [Ship Cycle 2026-09-24](https://github.com/johnnyc-9164/contractor-os/milestone/1).
 
 ## Completed Stage 1 prerequisite — publish the audited baseline
 
@@ -13,11 +13,15 @@ Derived from [AUDIT.md](AUDIT.md). The private repository and baseline push are 
 
 ### 1. Connect the private repository to Vercel
 
+- **Tracking issue:** [#1](https://github.com/johnnyc-9164/contractor-os/issues/1)
+
 - **Audit finding:** Vercel project `contractoros` is configured and the CLI is authenticated, but its Git settings say it is not connected. `vercel git connect https://github.com/johnnyc-9164/contractor-os.git` exited 1 because Vercel lacks GitHub App access to the private repository.
 - **Acceptance criteria:** Install/authorize Vercel's GitHub App for only `johnnyc-9164/contractor-os`; connect that repository to project `contractoros`; verify the Git connection in Vercel; trigger and verify a preview deployment from a non-production branch. Do not trigger a production deployment.
 - **Verification:** Confirm the GitHub App installation repository selection; confirm Vercel Project Settings → Git shows `johnnyc-9164/contractor-os`; push a non-production branch and inspect its deployment state with `vercel ls` / `vercel inspect`.
 
 ### 2. Revoke any exposed GitHub personal access token
+
+- **Tracking issue:** [#2](https://github.com/johnnyc-9164/contractor-os/issues/2)
 
 - **Audit finding:** The prior audit records that a user attachment visibly contained a GitHub personal access token. Treat it as exposed; no token value was copied or used by this task.
 - **Acceptance criteria:** The user revokes the exposed token in GitHub token settings and confirms the action; do not reproduce or use its value.
@@ -25,11 +29,15 @@ Derived from [AUDIT.md](AUDIT.md). The private repository and baseline push are 
 
 ### 3. Verify configured integrations safely in preview
 
+- **Tracking issue:** [#3](https://github.com/johnnyc-9164/contractor-os/issues/3)
+
 - **Audit finding:** Clerk, Convex, and PWA are configured in the repository but have no live runtime proof from this audit.
 - **Acceptance criteria:** With approved non-production credentials and data, demonstrate Clerk sign-in, Convex health, and PWA offline behavior; keep production data and deployment out of scope.
 - **Verification:** Record the exact preview/browser smoke procedure and command outputs on the issue.
 
 ### 4. Add automated tests with the first feature
+
+- **Tracking issue:** [#4](https://github.com/johnnyc-9164/contractor-os/issues/4)
 
 - **Audit finding:** `pnpm test` exits 1 because no test script exists. This is an accepted gap until the first feature lands.
 - **Acceptance criteria:** Add a test script and automated coverage as part of the first feature; keep this gap documented until then.
@@ -37,4 +45,4 @@ Derived from [AUDIT.md](AUDIT.md). The private repository and baseline push are 
 
 ## Stage 2 candidate
 
-Item 1 is the highest-leverage next task. The user explicitly requested the Vercel connection and authorized granting the GitHub App access only to this repository. Browser installation is pending because the GitHub page opened under `mplsjohnnycage`; the user must switch to `johnnyc-9164` before installation can proceed. No production deployment is authorized.
+Stage 1 exit gate is met: the plan is pushed, a cycle milestone exists, and every remaining plan item has an issue with acceptance criteria and verification commands. Stage 2 item 1 is the highest-leverage task. The user explicitly requested the Vercel connection and authorized granting the GitHub App access only to this repository. Browser installation is pending because the GitHub page opened under `mplsjohnnycage`; the user must switch to `johnnyc-9164` before installation can proceed. No production deployment is authorized.
