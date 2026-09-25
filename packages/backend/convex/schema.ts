@@ -45,6 +45,45 @@ export default defineSchema({
 		.index("by_site", ["siteIdentifier"])
 		.index("by_tenant", ["tenantId"]),
 
+	// As-built amendment TC-BUILD-4: painting pipeline source of truth.
+	leads: defineTable({
+		...provenance,
+		key: v.string(), // lead_*
+		title: v.string(),
+		source: v.union(
+			v.literal("web_form"),
+			v.literal("phone"),
+			v.literal("referral"),
+			v.literal("portal"),
+			v.literal("walk_in"),
+			v.literal("other"),
+		),
+		contact_name: v.optional(v.string()),
+		contact_phone: v.optional(v.string()),
+		contact_email: v.optional(v.string()),
+		notes: v.optional(v.string()),
+		stage: v.union(
+			v.literal("Prospect"),
+			v.literal("Outreach Sent"),
+			v.literal("Reply Received"),
+			v.literal("Qualifying"),
+			v.literal("Site Visit Scheduled"),
+			v.literal("Scope In Progress"),
+			v.literal("Proposal Sent"),
+			v.literal("Bid Submitted"),
+			v.literal("Awarded"),
+			v.literal("Won"),
+			v.literal("On Hold"),
+			v.literal("Disqualified"),
+			v.literal("Lost"),
+		),
+		client_name: v.optional(v.string()),
+		client_type: v.optional(v.string()),
+		qualification_notes: v.optional(v.string()),
+		co_lead_id: v.optional(v.string()),
+		reopened_from: v.optional(v.string()),
+	}).index("by_key", ["key"]),
+
 	// ── Entity 1: Opportunity ──────────────────────────────────────────────
 	opportunities: defineTable({
 		...provenance,
@@ -111,7 +150,7 @@ export default defineSchema({
 			v.literal("declined"),
 		),
 		red_flags: v.any(), // red-flag checklist as structured booleans
-		opportunity_id: v.optional(v.string()), // → opportunities.key
+		lead_id: v.optional(v.string()), // → leads.key
 		gc_vendor_id: v.optional(v.string()), // → vendors.key
 	}).index("by_key", ["key"]),
 
@@ -163,7 +202,7 @@ export default defineSchema({
 		exclusions: v.any(), // exclusions list (JSON)
 		markup_pct: v.number(),
 		margin_pct: v.number(),
-		opportunity_id: v.optional(v.string()), // → opportunities.key
+		lead_id: v.optional(v.string()), // → leads.key
 		bid_id: v.optional(v.string()), // → bids.key
 	}).index("by_key", ["key"]),
 
