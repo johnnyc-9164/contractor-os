@@ -6,6 +6,7 @@ import schema from "./schema.js";
 // Build Pack §22 transcription.
 
 const EXPECTED_TABLES = [
+	"leads",
 	// 20 entities (§22.1)
 	"opportunities",
 	"accounts",

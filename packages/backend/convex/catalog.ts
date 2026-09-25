@@ -3,33 +3,84 @@
 import { v } from "convex/values";
 import { z } from "zod";
 import { api } from "./_generated/api";
-import { mutation } from "./_generated/server";
+import { type MutationCtx, mutation } from "./_generated/server";
 import type { ResolvedUser } from "./identity";
-import * as opportunity from "./opportunity";
+import * as lead from "./lead";
 
-const intakeSchema = z.object({
-	account_id: z.string().min(1),
-	channel: z.string().min(1),
-	contact_id: z.string().min(1).optional(),
+const captureSchema = z.object({
+	title: z.string().min(1),
+	source: z.enum([
+		"web_form",
+		"phone",
+		"referral",
+		"portal",
+		"walk_in",
+		"other",
+	]),
+	contact_name: z.string().min(1).optional(),
+	contact_phone: z.string().min(1).optional(),
+	contact_email: z.string().min(1).optional(),
+	notes: z.string().min(1).optional(),
 });
-const qualifySchema = z.object({ opportunity_key: z.string().min(1) });
-const bidNoBidSchema = z
+const leadKeySchema = z.object({ lead_id: z.string().min(1) });
+const sendOutreachSchema = leadKeySchema.extend({
+	channel: z.enum(["call", "sms", "email", "in_person"]),
+	message_ref: z.string().min(1).optional(),
+});
+const recordReplySchema = leadKeySchema.extend({
+	reply_summary: z.string().min(1),
+});
+const qualifySchema = leadKeySchema.extend({
+	client_name: z.string().min(1),
+	client_type: z.string().min(1).optional(),
+	qualification_notes: z.string().min(1).optional(),
+});
+const scheduleSiteVisitSchema = leadKeySchema.extend({
+	scheduled_at: z.string().min(1),
+	address: z.string().min(1).optional(),
+	notes: z.string().min(1).optional(),
+});
+const startScopeSchema = leadKeySchema.extend({
+	scope_notes: z.string().min(1).optional(),
+	trade_spec_refs: z.array(z.string().min(1)).optional(),
+});
+const sendProposalSchema = leadKeySchema.extend({
+	amount_cents: z.number().positive(),
+	proposal_doc_ref: z.string().min(1).optional(),
+});
+const submitBidSchema = leadKeySchema.extend({
+	bid_amount_cents: z.number().positive(),
+});
+const awardSchema = leadKeySchema.extend({
+	awarded_at: z.string().min(1).optional(),
+});
+const winSchema = leadKeySchema.extend({
+	contract_ref: z.string().min(1).optional(),
+});
+const reasonSchema = leadKeySchema.extend({ reason: z.string().min(1) });
+const terminalSchema = z
 	.object({
-		opportunity_key: z.string().min(1),
-		bid_no_bid: z.boolean(),
-		no_go_reason: z.string().min(1).optional(),
+		lead_id: z.string().min(1),
+		reason: z
+			.enum(["no_show", "price", "timing", "fit", "duplicate", "other"])
+			.optional(),
+		reason_text: z.string().min(1).optional(),
 	})
 	.superRefine((value, context) => {
-		if (!value.bid_no_bid && !value.no_go_reason) {
+		if (!value.reason) {
 			context.addIssue({
 				code: "custom",
-				path: ["no_go_reason"],
-				message: "no_go_reason is required when bid_no_bid is false",
+				path: ["reason"],
+				message: "reason is required",
 			});
 		}
 	});
 
-type Authority = "Johnny" | "Anthony sub / Johnny" | "agent" | "website bridge";
+type Authority =
+	| "Johnny"
+	| "Agent"
+	| "System (website bridge)"
+	| "System (webhook)";
 type Operation = {
 	name: string;
 	authority: readonly Authority[];
@@ -38,44 +89,156 @@ type Operation = {
 	emits: string;
 	schema: z.ZodType;
 	run: (
-		db: Parameters<typeof opportunity.intake>[0],
+		ctx: MutationCtx,
 		payload: never,
 		actor: ResolvedUser,
-	) => Promise<opportunity.ServiceResult>;
+	) => Promise<lead.ServiceResult>;
 };
 
-// As-built authority assumptions: website bridge is an agent-class (`agt_*`)
-// caller; "Anthony sub / Johnny" means either owner or principal.
+// Agent, website-bridge, and webhook callers use agent-class (`agt_*`) keys.
 export const OPERATIONS: Record<string, Operation> = {
-	"opportunity.intake": {
-		name: "opportunity.intake",
-		authority: ["Johnny", "website bridge", "agent"],
-		writes: ["opportunities"],
-		guards: ["estimating.accept gates future walk/takeoff/estimate work"],
-		emits: "opportunity.intake",
-		schema: intakeSchema,
-		run: opportunity.intake as Operation["run"],
+	"lead.capture": {
+		name: "lead.capture",
+		authority: ["Johnny", "Agent", "System (website bridge)"],
+		writes: ["leads: stage=Prospect"],
+		guards: [],
+		emits: "lead.captured",
+		schema: captureSchema,
+		run: lead.capture as Operation["run"],
 	},
-	"opportunity.qualify": {
-		name: "opportunity.qualify",
-		authority: ["Johnny"],
-		writes: ["opportunities"],
-		guards: ["estimating.accept gates future walk/takeoff/estimate work"],
-		emits: "opportunity.qualify",
+	"lead.sendOutreach": {
+		name: "lead.sendOutreach",
+		authority: ["Johnny", "Agent"],
+		writes: ["leads: stage=Outreach Sent"],
+		guards: ["stage=Prospect"],
+		emits: "lead.outreach_sent",
+		schema: sendOutreachSchema,
+		run: lead.sendOutreach as Operation["run"],
+	},
+	"lead.recordReply": {
+		name: "lead.recordReply",
+		authority: ["Johnny", "Agent", "System (webhook)"],
+		writes: ["leads: stage=Reply Received"],
+		guards: ["stage=Outreach Sent"],
+		emits: "lead.reply_received",
+		schema: recordReplySchema,
+		run: lead.recordReply as Operation["run"],
+	},
+	"lead.qualify": {
+		name: "lead.qualify",
+		authority: ["Johnny", "Agent"],
+		writes: ["leads: stage=Qualifying", "co_lead: stage=qualifying"],
+		guards: ["stage=Reply Received"],
+		emits: "lead.qualified",
 		schema: qualifySchema,
-		run: opportunity.qualify as Operation["run"],
+		run: lead.qualify as Operation["run"],
 	},
-	"opportunity.bidNoBid": {
-		name: "opportunity.bidNoBid",
-		authority: ["Anthony sub / Johnny"],
-		writes: ["opportunities"],
+	"lead.scheduleSiteVisit": {
+		name: "lead.scheduleSiteVisit",
+		authority: ["Johnny", "Agent"],
+		writes: ["leads: stage=Site Visit Scheduled", "co_site_visit"],
+		guards: ["stage=Qualifying"],
+		emits: "lead.site_visit_scheduled",
+		schema: scheduleSiteVisitSchema,
+		run: lead.scheduleSiteVisit as Operation["run"],
+	},
+	"lead.startScope": {
+		name: "lead.startScope",
+		authority: ["Johnny", "Agent"],
+		writes: ["leads: stage=Scope In Progress", "co_scope"],
+		guards: ["stage=Site Visit Scheduled"],
+		emits: "lead.scope_started",
+		schema: startScopeSchema,
+		run: lead.startScope as Operation["run"],
+	},
+	"lead.sendProposal": {
+		name: "lead.sendProposal",
+		authority: ["Johnny", "Agent"],
+		writes: ["leads: stage=Proposal Sent", "co_proposal"],
+		guards: ["stage=Scope In Progress"],
+		emits: "lead.proposal_sent",
+		schema: sendProposalSchema,
+		run: lead.sendProposal as Operation["run"],
+	},
+	"lead.submitBid": {
+		name: "lead.submitBid",
+		authority: ["Johnny", "Agent"],
+		writes: ["leads: stage=Bid Submitted", "co_bid"],
+		guards: ["stage=Proposal Sent"],
+		emits: "lead.bid_submitted",
+		schema: submitBidSchema,
+		run: lead.submitBid as Operation["run"],
+	},
+	"lead.award": {
+		name: "lead.award",
+		authority: ["Johnny"],
+		writes: ["leads: stage=Awarded"],
+		guards: ["stage in {Proposal Sent, Bid Submitted}"],
+		emits: "lead.awarded",
+		schema: awardSchema,
+		run: lead.award as Operation["run"],
+	},
+	"lead.win": {
+		name: "lead.win",
+		authority: ["Johnny"],
+		writes: ["leads: stage=Won", "co_contract"],
+		guards: ["stage in {Proposal Sent, Awarded}"],
+		emits: "lead.won",
+		schema: winSchema,
+		run: lead.win as Operation["run"],
+	},
+	"lead.hold": {
+		name: "lead.hold",
+		authority: ["Johnny", "Agent"],
+		writes: ["leads: stage=On Hold", "co_lead: stage=on_hold"],
 		guards: [
-			"no_go_reason required when bid_no_bid is false",
-			"estimating.accept gates future walk/takeoff/estimate work",
+			"stage in {Qualifying, Site Visit Scheduled, Scope In Progress, Proposal Sent, Bid Submitted, Awarded}",
 		],
-		emits: "opportunity.bidNoBid",
-		schema: bidNoBidSchema,
-		run: opportunity.bidNoBid as Operation["run"],
+		emits: "lead.held",
+		schema: reasonSchema,
+		run: lead.hold as Operation["run"],
+	},
+	"lead.resume": {
+		name: "lead.resume",
+		authority: ["Johnny", "Agent"],
+		writes: ["leads: stage=Qualifying", "co_lead: stage=qualifying"],
+		guards: ["stage=On Hold"],
+		emits: "lead.resumed",
+		schema: leadKeySchema,
+		run: lead.resume as Operation["run"],
+	},
+	"lead.disqualify": {
+		name: "lead.disqualify",
+		authority: ["Johnny", "Agent"],
+		writes: ["leads: stage=Disqualified"],
+		guards: [
+			"stage in {Prospect, Outreach Sent, Reply Received, Qualifying}",
+			"reason required",
+		],
+		emits: "lead.disqualified",
+		schema: terminalSchema,
+		run: lead.disqualify as Operation["run"],
+	},
+	"lead.lose": {
+		name: "lead.lose",
+		authority: ["Johnny", "Agent"],
+		writes: ["leads: stage=Lost", "co_lead: stage=lost when present"],
+		guards: [
+			"stage in {Outreach Sent, Reply Received, Qualifying, Site Visit Scheduled, Scope In Progress, Proposal Sent, Bid Submitted, Awarded, On Hold}",
+			"reason required",
+		],
+		emits: "lead.lost",
+		schema: terminalSchema,
+		run: lead.lose as Operation["run"],
+	},
+	"lead.reopen": {
+		name: "lead.reopen",
+		authority: ["Johnny", "Agent"],
+		writes: ["new leads record: stage=Prospect, reopened_from=source"],
+		guards: ["stage in {Lost, Disqualified}", "Won rejected"],
+		emits: "lead.reopened",
+		schema: reasonSchema,
+		run: lead.reopen as Operation["run"],
 	},
 };
 
@@ -136,15 +299,13 @@ function envelope(
 function isAuthorized(authority: readonly Authority[], actor: ResolvedUser) {
 	return authority.some((entry) => {
 		if (entry === "Johnny") return actor.role === "principal";
-		if (entry === "Anthony sub / Johnny")
-			return actor.role === "owner" || actor.role === "principal";
 		return actor.user_key.startsWith("agt_");
 	});
 }
 
 function entityKey(payload: unknown, fallback: string): string {
-	if (payload && typeof payload === "object" && "opportunity_key" in payload) {
-		const key = (payload as { opportunity_key?: unknown }).opportunity_key;
+	if (payload && typeof payload === "object" && "lead_id" in payload) {
+		const key = (payload as { lead_id?: unknown }).lead_id;
 		if (typeof key === "string") return key;
 	}
 	return fallback;
@@ -191,7 +352,7 @@ export const dispatch = mutation({
 		if (!isAuthorized(operation.authority, actor)) {
 			await ctx.runMutation(api.events.append, {
 				action: "catalog.blocked_attempt",
-				entity_type: "opportunity",
+				entity_type: "lead",
 				entity_key: entityKey(args.payload, args.idempotency_key),
 				reason: `forbidden: requires ${operation.authority.join(" or ")}`,
 				source: "catalog.dispatch",
@@ -210,7 +371,7 @@ export const dispatch = mutation({
 			const detail = parsed.error.flatten();
 			await ctx.runMutation(api.events.append, {
 				action: "catalog.blocked_attempt",
-				entity_type: "opportunity",
+				entity_type: "lead",
 				entity_key: entityKey(args.payload, args.idempotency_key),
 				reason: `validation: ${JSON.stringify(detail)}`,
 				source: "catalog.dispatch",
@@ -221,38 +382,43 @@ export const dispatch = mutation({
 			});
 		}
 
-		let result: opportunity.ServiceResult;
+		let result: lead.ServiceResult;
 		try {
-			result = await operation.run(ctx.db, parsed.data as never, actor);
+			result = await operation.run(ctx, parsed.data as never, actor);
 		} catch (error) {
 			// Blocked attempts are returned, not thrown (TC-BUILD-3 constraint):
 			// every dispatch — success or blocked — must produce an event_log row.
 			const detail = error instanceof Error ? error.message : String(error);
 			await ctx.runMutation(api.events.append, {
 				action: "catalog.blocked_attempt",
-				entity_type: "opportunity",
+				entity_type: "lead",
 				entity_key: entityKey(args.payload, args.idempotency_key),
 				reason: `service: ${detail}`,
 				source: "catalog.dispatch",
 			});
 			return envelope(args.contract, args.schema_version, {
 				executor: actor.user_key,
-				error: { code: "NOT_FOUND", detail },
+				error: {
+					code:
+						error instanceof lead.LeadServiceError ? error.code : "VALIDATION",
+					detail,
+				},
 			});
 		}
 		await ctx.runMutation(api.events.append, {
 			action: operation.emits,
-			entity_type: "opportunity",
+			entity_type: "lead",
 			entity_key: result.record_id,
 			...(result.from_state ? { from_state: result.from_state } : {}),
 			...(result.to_state ? { to_state: result.to_state } : {}),
+			...(result.reason ? { reason: result.reason } : {}),
 			source: "catalog.dispatch",
 			idempotency_key: args.idempotency_key,
 		});
 		const response = envelope(args.contract, args.schema_version, {
 			ok: true,
 			record_id: result.record_id,
-			entity_refs: [result.record_id],
+			entity_refs: [result.record_id, ...(result.entity_refs ?? [])],
 			status: result.status,
 			facts: { operation: operation.name },
 			executor: actor.user_key,
@@ -267,7 +433,7 @@ export const dispatch = mutation({
 			updated_at: response.created_at,
 			source: "catalog.dispatch",
 			schema_version: args.schema_version,
-			company_id: opportunity.COMPANY_ID,
+			company_id: lead.COMPANY_ID,
 		});
 		return response;
 	},

@@ -43,10 +43,10 @@ async function seedIdentity(
 
 function intakeArgs(idempotencyKey: string) {
 	return {
-		contract: "opportunity.intake",
+		contract: "lead.capture",
 		schema_version: 1,
 		idempotency_key: idempotencyKey,
-		payload: { account_id: "acct_test", channel: "website" },
+		payload: { title: "Test lead", source: "web_form" },
 	};
 }
 
@@ -65,7 +65,7 @@ describe("catalog.dispatch", () => {
 		const event = await t.run((ctx) =>
 			ctx.db
 				.query("event_log")
-				.filter((q) => q.eq(q.field("action"), "opportunity.intake"))
+				.filter((q) => q.eq(q.field("action"), "lead.captured"))
 				.unique(),
 		);
 		expect(event?.actor_user_id).toBe("usr_johnny");
@@ -77,10 +77,10 @@ describe("catalog.dispatch", () => {
 		const authed = t.withIdentity({ tokenIdentifier: CREW_SUBJECT });
 
 		const result = await authed.mutation(api.catalog.dispatch, {
-			contract: "opportunity.qualify",
+			contract: "lead.capture",
 			schema_version: 1,
 			idempotency_key: "01KCATALOGAT04BLOCK00000",
-			payload: { opportunity_key: "opp_does_not_matter" },
+			payload: { title: "Denied lead", source: "phone" },
 		});
 
 		expect(result.ok).toBe(false);
@@ -95,7 +95,7 @@ describe("catalog.dispatch", () => {
 		expect(blocked?.reason).toContain("forbidden");
 	});
 
-	it("replays the original result without a duplicate opportunity or event", async () => {
+	it("replays the original result without a duplicate lead or event", async () => {
 		const t = setup();
 		await seedIdentity(t, "usr_johnny", "Johnny", "principal", JOHNNY_SUBJECT);
 		const authed = t.withIdentity({ tokenIdentifier: JOHNNY_SUBJECT });
@@ -107,15 +107,15 @@ describe("catalog.dispatch", () => {
 		expect(second.record_id).toBe(first.record_id);
 		expect(second).toEqual(first);
 		const counts = await t.run(async (ctx) => ({
-			opportunities: (await ctx.db.query("opportunities").collect()).length,
+			leads: (await ctx.db.query("leads").collect()).length,
 			events: (
 				await ctx.db
 					.query("event_log")
-					.filter((q) => q.eq(q.field("action"), "opportunity.intake"))
+					.filter((q) => q.eq(q.field("action"), "lead.captured"))
 					.collect()
 			).length,
 		}));
-		expect(counts).toEqual({ opportunities: 1, events: 1 });
+		expect(counts).toEqual({ leads: 1, events: 1 });
 	});
 
 	it("returns NOT_FOUND and logs an unknown contract attempt", async () => {
