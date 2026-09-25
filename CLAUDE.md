@@ -34,8 +34,11 @@ and `AGENTS.md` must then be corrected.
 
 Jev (TypeSafe judgment layer) is for bounded judgment; exact facts come from
 deterministic tools (git, gh, test exit codes). Supervisor-side gates are
-mandatory. Worker-side Jev is best-effort (Codex sandbox credential-socket
-EPERM) — never let it hard-block a worker.
+mandatory. Codex workers cannot reach Jev at all — the `workspace-write`
+sandbox blocks the authd socket (EPERM) and localhost TCP (proven by probe) —
+so they never attempt it; instead their contracts require per-criterion
+evidence in the completion report and the supervisor runs `jev_evaluate`
+over it. Every worker seam still gets a Jev judgment, supervisor-side.
 
 Call a gate at **every** seam, not just the big three:
 
