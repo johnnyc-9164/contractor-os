@@ -1,0 +1,26 @@
+{
+	"name": "marketing",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"dev": "next dev --port 3002",
+		"build": "next build",
+		"check-types": "tsc --noEmit",
+		"start": "next start"
+	},
+	"dependencies": {
+		"@contractor-os/ui": "workspace:*",
+		"next": "^16.3.4",
+		"react": "catalog:",
+		"react-dom": "catalog:",
+		"tailwindcss": "catalog:"
+	},
+	"devDependencies": {
+		"@contractor-os/config": "workspace:*",
+		"@tailwindcss/postcss": "catalog:",
+		"@types/node": "catalog:",
+		"@types/react": "catalog:",
+		"@types/react-dom": "catalog:",
+		"typescript": "catalog:"
+	}
+}
