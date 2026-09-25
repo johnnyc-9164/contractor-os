@@ -100,11 +100,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@johnnyc2026/cms':
-        specifier: file:E:/Downloads/johnnyc2026-cms-0.2.0.tgz
-        version: file:E:/Downloads/johnnyc2026-cms-0.2.0.tgz(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))
+        specifier: file:../../vendor/johnnyc2026-cms-0.2.0.tgz
+        version: file:vendor/johnnyc2026-cms-0.2.0.tgz(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))
       '@johnnyc2026/contractor-os-core':
-        specifier: file:E:/Downloads/johnnyc2026-contractor-os-core-0.5.1.tgz
-        version: file:E:/Downloads/johnnyc2026-contractor-os-core-0.5.1.tgz(convex-helpers@0.1.124(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))(hono@4.13.8)(react@19.3.0)(typescript@6.0.3)(zod@4.6.5))(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))
+        specifier: file:../../vendor/johnnyc2026-contractor-os-core-0.5.1.tgz
+        version: file:vendor/johnnyc2026-contractor-os-core-0.5.1.tgz(convex-helpers@0.1.124(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))(hono@4.13.8)(react@19.3.0)(typescript@6.0.3)(zod@4.6.5))(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))
       '@swc/helpers':
         specifier: ^0.5.23
         version: 0.5.23
@@ -1047,15 +1047,15 @@ packages:
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
     engines: {node: '>=18.0.0'}
 
-  '@johnnyc2026/cms@file:E:/Downloads/johnnyc2026-cms-0.2.0.tgz':
-    resolution: {integrity: sha512-IPGlFZbG/X3QLJIbwXCx7tIVKh4dIslRVvCm4qt2BPH9kWUzQBe2aX6Hkf1FVRmvQ/vDZR3Y6/4hoZ1m0vr2iQ==, tarball: file:E:/Downloads/johnnyc2026-cms-0.2.0.tgz}
+  '@johnnyc2026/cms@file:vendor/johnnyc2026-cms-0.2.0.tgz':
+    resolution: {integrity: sha512-IPGlFZbG/X3QLJIbwXCx7tIVKh4dIslRVvCm4qt2BPH9kWUzQBe2aX6Hkf1FVRmvQ/vDZR3Y6/4hoZ1m0vr2iQ==, tarball: file:vendor/johnnyc2026-cms-0.2.0.tgz}
     version: 0.2.0
     engines: {node: '>=22'}
     peerDependencies:
       convex: ^1.46.0
 
-  '@johnnyc2026/contractor-os-core@file:E:/Downloads/johnnyc2026-contractor-os-core-0.5.1.tgz':
-    resolution: {integrity: sha512-iPToBS6Zmg6blMxOekTG+E298zn7iztSql1reVfQiK5zOk0LMdNHJINGYbmdy0QbSv4yfB70Je3ObutqZqylVA==, tarball: file:E:/Downloads/johnnyc2026-contractor-os-core-0.5.1.tgz}
+  '@johnnyc2026/contractor-os-core@file:vendor/johnnyc2026-contractor-os-core-0.5.1.tgz':
+    resolution: {integrity: sha512-iPToBS6Zmg6blMxOekTG+E298zn7iztSql1reVfQiK5zOk0LMdNHJINGYbmdy0QbSv4yfB70Je3ObutqZqylVA==, tarball: file:vendor/johnnyc2026-contractor-os-core-0.5.1.tgz}
     version: 0.5.1
     engines: {node: '>=22'}
     peerDependencies:
@@ -4676,11 +4676,11 @@ snapshots:
     dependencies:
       minipass: 7.1.3
 
-  '@johnnyc2026/cms@file:E:/Downloads/johnnyc2026-cms-0.2.0.tgz(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))':
+  '@johnnyc2026/cms@file:vendor/johnnyc2026-cms-0.2.0.tgz(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))':
     dependencies:
       convex: 1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
 
-  '@johnnyc2026/contractor-os-core@file:E:/Downloads/johnnyc2026-contractor-os-core-0.5.1.tgz(convex-helpers@0.1.124(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))(hono@4.13.8)(react@19.3.0)(typescript@6.0.3)(zod@4.6.5))(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))':
+  '@johnnyc2026/contractor-os-core@file:vendor/johnnyc2026-contractor-os-core-0.5.1.tgz(convex-helpers@0.1.124(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))(hono@4.13.8)(react@19.3.0)(typescript@6.0.3)(zod@4.6.5))(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))':
     dependencies:
       convex: 1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
       convex-helpers: 0.1.124(convex@1.46.0(@clerk/react@6.17.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0))(hono@4.13.8)(react@19.3.0)(typescript@6.0.3)(zod@4.6.5)
