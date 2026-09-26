@@ -15,11 +15,13 @@ export type ServiceResult = {
 	to_state?: string;
 	reason?: string;
 	entity_refs?: string[];
+	event_action?: string;
+	facts?: Record<string, unknown>;
 };
 
 export class LeadServiceError extends Error {
 	constructor(
-		public readonly code: "NOT_FOUND" | "GUARD_STAGE",
+		public readonly code: "NOT_FOUND" | "GUARD_STAGE" | "GUARD_BLOCKED",
 		message: string,
 	) {
 		super(message);
@@ -248,11 +250,39 @@ export async function startScope(
 
 export async function sendProposal(
 	ctx: MutationCtx,
-	payload: LeadPayload & { amount_cents: number; proposal_doc_ref?: string },
+	payload: LeadPayload & {
+		amount_cents: number;
+		estimate_version_id: string;
+		proposal_doc_ref?: string;
+	},
 	actor: ResolvedUser,
 ) {
 	const record = await findLead(ctx, payload.lead_id);
 	guard(record, ["Scope In Progress"], "Proposal Sent");
+	const estimate = await ctx.db
+		.query("estimates")
+		.withIndex("by_key", (query) =>
+			query.eq("key", payload.estimate_version_id),
+		)
+		.unique();
+	if (!estimate || estimate.lead_id !== record.key) {
+		throw new LeadServiceError(
+			"GUARD_BLOCKED",
+			"GUARD_BLOCKED estimate version must belong to lead",
+		);
+	}
+	if (estimate.status !== "approved") {
+		throw new LeadServiceError(
+			"GUARD_BLOCKED",
+			"GUARD_BLOCKED estimate version must be approved",
+		);
+	}
+	if (estimate.base_total_cents !== payload.amount_cents) {
+		throw new LeadServiceError(
+			"GUARD_BLOCKED",
+			"GUARD_BLOCKED proposal amount must equal engine-computed total",
+		);
+	}
 	if (!record.co_lead_id || !record.client_name)
 		throw new LeadServiceError("NOT_FOUND", "Component lead or client missing");
 	const scope = `scope-${record.co_lead_id}-v1`;
@@ -281,11 +311,27 @@ export async function sendProposal(
 			version: "1",
 		},
 	});
+	const now = new Date().toISOString();
+	await ctx.db.insert("proposals", {
+		key: created.primary.identifier,
+		estimate_id: estimate.key,
+		estimate_version: estimate.version,
+		status: "sent",
+		created_by: actor.user_key,
+		created_at: now,
+		updated_by: actor.user_key,
+		updated_at: now,
+		source: "catalog.dispatch",
+		source_ref: payload.proposal_doc_ref,
+		schema_version: SCHEMA_VERSION,
+		company_id: COMPANY_ID,
+	});
 	await patchStage(ctx, record, actor, "Proposal Sent");
 	return result(record, "Proposal Sent", [
 		record.co_lead_id,
 		scope,
 		created.primary.identifier,
+		estimate.key,
 	]);
 }
 

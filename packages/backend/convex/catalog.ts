@@ -4,6 +4,8 @@ import { v } from "convex/values";
 import { z } from "zod";
 import { api } from "./_generated/api";
 import { type MutationCtx, mutation } from "./_generated/server";
+import * as approvals from "./approvals";
+import * as estimate from "./estimate";
 import type { ResolvedUser } from "./identity";
 import * as lead from "./lead";
 
@@ -46,6 +48,7 @@ const startScopeSchema = leadKeySchema.extend({
 });
 const sendProposalSchema = leadKeySchema.extend({
 	amount_cents: z.number().positive(),
+	estimate_version_id: z.string().min(1),
 	proposal_doc_ref: z.string().min(1).optional(),
 });
 const submitBidSchema = leadKeySchema.extend({
@@ -76,8 +79,71 @@ const terminalSchema = z
 		}
 	});
 
+const estimateLineSchema = z
+	.object({
+		rate_row_ref: z.string().min(1).optional(),
+		kind: z.enum([
+			"labor",
+			"material",
+			"equipment",
+			"prep",
+			"setup",
+			"cleanup",
+			"fee",
+		]),
+		label: z.string().min(1),
+		quantity: z.number().positive(),
+		unit: z.string().min(1),
+		notes: z.string().min(1).optional(),
+		burdened_pct: z.number().nonnegative().optional(),
+		epistemic: z.string().min(1).optional(),
+	})
+	.strict();
+const estimateCreateSchema = z
+	.object({
+		lead_id: z.string().min(1),
+		rate_set_version: z.string().min(1),
+		lines: z.array(estimateLineSchema).min(1),
+		assumptions: z.array(
+			z
+				.object({
+					text: z.string().min(1),
+					owner: z.string().min(1).optional(),
+				})
+				.strict(),
+		),
+	})
+	.strict();
+const estimateRepriceSchema = z
+	.object({
+		estimate_id: z.string().min(1),
+		changed_lines: z.array(estimateLineSchema).min(1).optional(),
+		reason: z.string().min(1),
+	})
+	.strict();
+const estimateKeySchema = z.object({ estimate_id: z.string().min(1) }).strict();
+const estimateReasonSchema = estimateKeySchema.extend({
+	reason: z.string().min(1),
+});
+const technicalSchema = z
+	.object({
+		estimate_id: z.string().min(1),
+		decision: z.enum(["approve", "reject"]),
+		reason: z.string().min(1).optional(),
+	})
+	.superRefine((value, context) => {
+		if (value.decision === "reject" && !value.reason) {
+			context.addIssue({
+				code: "custom",
+				path: ["reason"],
+				message: "reason is required for reject",
+			});
+		}
+	});
+
 type Authority =
 	| "Johnny"
+	| "Anthony"
 	| "Agent"
 	| "System (website bridge)"
 	| "System (webhook)";
@@ -97,6 +163,72 @@ type Operation = {
 
 // Agent, website-bridge, and webhook callers use agent-class (`agt_*`) keys.
 export const OPERATIONS: Record<string, Operation> = {
+	"estimate.create": {
+		name: "estimate.create",
+		authority: ["Johnny", "Agent"],
+		writes: ["estimates", "estimate_lines", "assumptions"],
+		guards: [
+			"lead stage=Scope In Progress",
+			"rate_set_version status=approved",
+		],
+		emits: "estimate.created",
+		schema: estimateCreateSchema,
+		run: estimate.create as Operation["run"],
+	},
+	"estimate.reprice": {
+		name: "estimate.reprice",
+		authority: ["Johnny", "Agent"],
+		writes: ["new estimates version", "new estimate_lines"],
+		guards: [
+			"status in {draft, anthony_review, rework, approved}",
+			"reason required",
+		],
+		emits: "estimate.repriced",
+		schema: estimateRepriceSchema,
+		run: estimate.reprice as Operation["run"],
+	},
+	"estimate.submitForReview": {
+		name: "estimate.submitForReview",
+		authority: ["Johnny"],
+		writes: ["estimates: status=anthony_review"],
+		guards: [
+			"scope, takeoff, assumptions owned, approved rate, required line kinds, burdened labor, epistemic",
+		],
+		emits: "estimate.submitted",
+		schema: estimateKeySchema,
+		run: estimate.submitForReview as Operation["run"],
+	},
+	"approval.technical": {
+		name: "approval.technical",
+		authority: ["Anthony"],
+		writes: ["decisions", "estimates: approved|rework"],
+		guards: [
+			"status=anthony_review",
+			"submit gates rechecked",
+			"validation gate",
+		],
+		emits: "technical.approved|technical.rejected",
+		schema: technicalSchema,
+		run: approvals.technical as Operation["run"],
+	},
+	"approval.commercial": {
+		name: "approval.commercial",
+		authority: ["Johnny"],
+		writes: ["decisions"],
+		guards: ["status=approved", "margin bounds warn only"],
+		emits: "commercial.reviewed",
+		schema: estimateKeySchema,
+		run: approvals.commercial as Operation["run"],
+	},
+	"estimate.abandon": {
+		name: "estimate.abandon",
+		authority: ["Johnny", "Agent"],
+		writes: ["estimates: status=abandoned"],
+		guards: ["status=draft", "reason required"],
+		emits: "estimate.abandoned",
+		schema: estimateReasonSchema,
+		run: estimate.abandon as Operation["run"],
+	},
 	"lead.capture": {
 		name: "lead.capture",
 		authority: ["Johnny", "Agent", "System (website bridge)"],
@@ -299,6 +431,7 @@ function envelope(
 function isAuthorized(authority: readonly Authority[], actor: ResolvedUser) {
 	return authority.some((entry) => {
 		if (entry === "Johnny") return actor.role === "principal";
+		if (entry === "Anthony") return actor.user_key === "usr_anthony";
 		return actor.user_key.startsWith("agt_");
 	});
 }
@@ -306,6 +439,10 @@ function isAuthorized(authority: readonly Authority[], actor: ResolvedUser) {
 function entityKey(payload: unknown, fallback: string): string {
 	if (payload && typeof payload === "object" && "lead_id" in payload) {
 		const key = (payload as { lead_id?: unknown }).lead_id;
+		if (typeof key === "string") return key;
+	}
+	if (payload && typeof payload === "object" && "estimate_id" in payload) {
+		const key = (payload as { estimate_id?: unknown }).estimate_id;
 		if (typeof key === "string") return key;
 	}
 	return fallback;
@@ -351,8 +488,10 @@ export const dispatch = mutation({
 
 		if (!isAuthorized(operation.authority, actor)) {
 			await ctx.runMutation(api.events.append, {
-				action: "catalog.blocked_attempt",
-				entity_type: "lead",
+				action: args.contract.startsWith("approval.")
+					? "approval.blocked_attempt"
+					: "catalog.blocked_attempt",
+				entity_type: args.contract.startsWith("lead.") ? "lead" : "estimate",
 				entity_key: entityKey(args.payload, args.idempotency_key),
 				reason: `forbidden: requires ${operation.authority.join(" or ")}`,
 				source: "catalog.dispatch",
@@ -390,8 +529,10 @@ export const dispatch = mutation({
 			// every dispatch — success or blocked — must produce an event_log row.
 			const detail = error instanceof Error ? error.message : String(error);
 			await ctx.runMutation(api.events.append, {
-				action: "catalog.blocked_attempt",
-				entity_type: "lead",
+				action: args.contract.startsWith("approval.")
+					? "approval.blocked_attempt"
+					: "catalog.blocked_attempt",
+				entity_type: args.contract.startsWith("lead.") ? "lead" : "estimate",
 				entity_key: entityKey(args.payload, args.idempotency_key),
 				reason: `service: ${detail}`,
 				source: "catalog.dispatch",
@@ -400,14 +541,17 @@ export const dispatch = mutation({
 				executor: actor.user_key,
 				error: {
 					code:
-						error instanceof lead.LeadServiceError ? error.code : "VALIDATION",
+						error instanceof lead.LeadServiceError ||
+						error instanceof estimate.EstimateServiceError
+							? error.code
+							: "VALIDATION",
 					detail,
 				},
 			});
 		}
 		await ctx.runMutation(api.events.append, {
-			action: operation.emits,
-			entity_type: "lead",
+			action: result.event_action ?? operation.emits,
+			entity_type: args.contract.startsWith("lead.") ? "lead" : "estimate",
 			entity_key: result.record_id,
 			...(result.from_state ? { from_state: result.from_state } : {}),
 			...(result.to_state ? { to_state: result.to_state } : {}),
@@ -420,7 +564,7 @@ export const dispatch = mutation({
 			record_id: result.record_id,
 			entity_refs: [result.record_id, ...(result.entity_refs ?? [])],
 			status: result.status,
-			facts: { operation: operation.name },
+			facts: { operation: operation.name, ...result.facts },
 			executor: actor.user_key,
 		});
 		await ctx.db.insert("catalog_idempotency", {
