@@ -24,7 +24,7 @@ import {
 	Phone,
 	ShieldCheck,
 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
 	buildEstimateHandoff,
 	EMPTY_ESTIMATE_INTAKE,
@@ -36,10 +36,10 @@ import {
 
 type IntakeStatus = "editing" | "prepared";
 
-function FieldError({ message }: { message?: string }) {
+function FieldError({ id, message }: { id: string; message?: string }) {
 	if (!message) return null;
 	return (
-		<p className="mt-1 text-destructive text-xs" role="alert">
+		<p className="mt-1 text-destructive text-xs" id={id} role="alert">
 			{message}
 		</p>
 	);
@@ -97,6 +97,20 @@ export function EstimateIntake() {
 	};
 
 	const handoffHref = buildEstimateHandoff(values);
+	const emailDescribedBy = [
+		"estimate-contact-requirement",
+		errors.email ? "estimate-email-error" : null,
+		errors.contact ? "estimate-contact-error" : null,
+	]
+		.filter((id): id is string => Boolean(id))
+		.join(" ");
+	const phoneDescribedBy = [
+		"estimate-contact-requirement",
+		errors.phone ? "estimate-phone-error" : null,
+		errors.contact ? "estimate-contact-error" : null,
+	]
+		.filter((id): id is string => Boolean(id))
+		.join(" ");
 
 	return (
 		<main className="min-h-full overflow-auto bg-background text-foreground">
@@ -136,7 +150,8 @@ export function EstimateIntake() {
 						<CardHeader className="border-b">
 							<CardTitle>Project brief</CardTitle>
 							<CardDescription>
-								Your answers stay in this browser until you choose a handoff.
+								Your answers exist only on this page. Refreshing or leaving
+								clears them.
 							</CardDescription>
 						</CardHeader>
 						<CardContent>
@@ -197,7 +212,14 @@ export function EstimateIntake() {
 						) : (
 							<form onSubmit={prepare} noValidate>
 								<CardContent className="flex flex-col gap-7 py-6">
-									<fieldset>
+									<fieldset
+										aria-describedby={
+											errors.projectType
+												? "estimate-project-type-error"
+												: undefined
+										}
+										aria-invalid={Boolean(errors.projectType)}
+									>
 										<legend className="mb-3 font-medium text-sm">
 											What are we painting? *
 										</legend>
@@ -217,6 +239,7 @@ export function EstimateIntake() {
 																update("projectType", projectType)
 															}
 															type="radio"
+															required
 															value={projectType}
 														/>
 														<span>{projectType}</span>
@@ -230,27 +253,42 @@ export function EstimateIntake() {
 												);
 											})}
 										</div>
-										<FieldError message={errors.projectType} />
+										<FieldError
+											id="estimate-project-type-error"
+											message={errors.projectType}
+										/>
 									</fieldset>
 
 									<div className="grid gap-5 sm:grid-cols-2">
 										<div>
 											<Label htmlFor="estimate-name">Name *</Label>
 											<Input
+												aria-describedby={
+													errors.name ? "estimate-name-error" : undefined
+												}
 												aria-invalid={Boolean(errors.name)}
 												className="mt-2 h-10"
 												id="estimate-name"
 												onChange={(event) => update("name", event.target.value)}
 												placeholder="Your name"
+												required
 												value={values.name}
 											/>
-											<FieldError message={errors.name} />
+											<FieldError
+												id="estimate-name-error"
+												message={errors.name}
+											/>
 										</div>
 										<div>
 											<Label htmlFor="estimate-location">
 												Project location *
 											</Label>
 											<Input
+												aria-describedby={
+													errors.location
+														? "estimate-location-error"
+														: undefined
+												}
 												aria-invalid={Boolean(errors.location)}
 												className="mt-2 h-10"
 												id="estimate-location"
@@ -258,53 +296,88 @@ export function EstimateIntake() {
 													update("location", event.target.value)
 												}
 												placeholder="City or project address"
+												required
 												value={values.location}
 											/>
-											<FieldError message={errors.location} />
+											<FieldError
+												id="estimate-location-error"
+												message={errors.location}
+											/>
 										</div>
 									</div>
 
-									<div className="grid gap-5 sm:grid-cols-2">
-										<div>
-											<Label htmlFor="estimate-email">
-												<Mail aria-hidden="true" className="size-3.5" />
-												Email
-											</Label>
-											<Input
-												aria-invalid={Boolean(errors.email || errors.contact)}
-												autoComplete="email"
-												className="mt-2 h-10"
-												id="estimate-email"
-												onChange={(event) =>
-													update("email", event.target.value)
-												}
-												placeholder="you@example.com"
-												type="email"
-												value={values.email}
-											/>
-											<FieldError message={errors.email} />
+									<fieldset
+										aria-describedby={
+											errors.contact
+												? "estimate-contact-requirement estimate-contact-error"
+												: "estimate-contact-requirement"
+										}
+										aria-invalid={Boolean(errors.contact)}
+									>
+										<legend className="mb-1 font-medium text-sm">
+											How can the contractor reach you? *
+										</legend>
+										<p
+											className="mb-3 text-muted-foreground text-xs"
+											id="estimate-contact-requirement"
+										>
+											Provide at least one: email address or phone number.
+										</p>
+										<div className="grid gap-5 sm:grid-cols-2">
+											<div>
+												<Label htmlFor="estimate-email">
+													<Mail aria-hidden="true" className="size-3.5" />
+													Email
+												</Label>
+												<Input
+													aria-describedby={emailDescribedBy}
+													aria-invalid={Boolean(errors.email || errors.contact)}
+													autoComplete="email"
+													className="mt-2 h-10"
+													id="estimate-email"
+													onChange={(event) =>
+														update("email", event.target.value)
+													}
+													placeholder="you@example.com"
+													required={!values.phone.trim()}
+													type="email"
+													value={values.email}
+												/>
+												<FieldError
+													id="estimate-email-error"
+													message={errors.email}
+												/>
+											</div>
+											<div>
+												<Label htmlFor="estimate-phone">
+													<Phone aria-hidden="true" className="size-3.5" />
+													Phone
+												</Label>
+												<Input
+													aria-describedby={phoneDescribedBy}
+													aria-invalid={Boolean(errors.phone || errors.contact)}
+													autoComplete="tel"
+													className="mt-2 h-10"
+													id="estimate-phone"
+													onChange={(event) =>
+														update("phone", event.target.value)
+													}
+													placeholder="(555) 555-0123"
+													required={!values.email.trim()}
+													type="tel"
+													value={values.phone}
+												/>
+												<FieldError
+													id="estimate-phone-error"
+													message={errors.phone}
+												/>
+											</div>
 										</div>
-										<div>
-											<Label htmlFor="estimate-phone">
-												<Phone aria-hidden="true" className="size-3.5" />
-												Phone
-											</Label>
-											<Input
-												aria-invalid={Boolean(errors.phone || errors.contact)}
-												autoComplete="tel"
-												className="mt-2 h-10"
-												id="estimate-phone"
-												onChange={(event) =>
-													update("phone", event.target.value)
-												}
-												placeholder="(555) 555-0123"
-												type="tel"
-												value={values.phone}
-											/>
-											<FieldError message={errors.phone} />
-										</div>
-									</div>
-									<FieldError message={errors.contact} />
+										<FieldError
+											id="estimate-contact-error"
+											message={errors.contact}
+										/>
+									</fieldset>
 
 									<div>
 										<Label htmlFor="estimate-timeline">Preferred timing</Label>
@@ -322,6 +395,9 @@ export function EstimateIntake() {
 									<div>
 										<Label htmlFor="estimate-details">Project details *</Label>
 										<Textarea
+											aria-describedby={
+												errors.details ? "estimate-details-error" : undefined
+											}
 											aria-invalid={Boolean(errors.details)}
 											className="mt-2 min-h-32"
 											id="estimate-details"
@@ -329,9 +405,13 @@ export function EstimateIntake() {
 												update("details", event.target.value)
 											}
 											placeholder="Rooms or exterior areas, surfaces, current condition, prep needs, colors, and anything else the painter should know."
+											required
 											value={values.details}
 										/>
-										<FieldError message={errors.details} />
+										<FieldError
+											id="estimate-details-error"
+											message={errors.details}
+										/>
 									</div>
 								</CardContent>
 								<CardFooter className="flex-col items-stretch gap-3 bg-muted/30 sm:flex-row sm:items-center sm:justify-between">
@@ -360,6 +440,12 @@ function PreparedHandoff({
 	href: string;
 	onEdit: () => void;
 }) {
+	const headingRef = useRef<HTMLHeadingElement>(null);
+
+	useEffect(() => {
+		headingRef.current?.focus();
+	}, []);
+
 	return (
 		<>
 			<CardContent className="py-8">
@@ -369,9 +455,13 @@ function PreparedHandoff({
 							<ClipboardCheck aria-hidden="true" className="size-5" />
 						</div>
 						<div>
-							<p className="font-semibold text-lg">
+							<h2
+								className="font-semibold text-lg outline-none"
+								ref={headingRef}
+								tabIndex={-1}
+							>
 								Your request is prepared, not sent.
-							</p>
+							</h2>
 							<p className="mt-2 text-muted-foreground text-sm leading-6">
 								Open the draft in your email app, add your contractor's email
 								address, and send it. The contractor must still confirm receipt,
