@@ -5,7 +5,6 @@ export type PreviewVerificationInput = {
 	target: string;
 	previewUrl: string;
 	expectedSha: string;
-	bypassToken?: string;
 };
 
 export type PreviewVerificationResult = {
@@ -82,13 +81,8 @@ export async function verifyPreviewDeployment(
 		throw new Error("Expected SHA must be the full 40-character commit SHA");
 	}
 	const previewUrl = previewOrigin(required(input.previewUrl, "Preview URL"));
-	const headers: Record<string, string> = { accept: "application/json" };
-	if (input.bypassToken) {
-		headers["x-vercel-protection-bypass"] = input.bypassToken;
-	}
-
 	const response = await fetcher(new URL("/api/health", previewUrl), {
-		headers,
+		headers: { accept: "application/json" },
 		redirect: "error",
 		signal: AbortSignal.timeout(30_000),
 	});
@@ -154,7 +148,6 @@ export async function runPreviewDeploymentCli(args = process.argv.slice(2)) {
 		target: argument(args, "--target") ?? "",
 		previewUrl: argument(args, "--preview-url") ?? "",
 		expectedSha: argument(args, "--expected-sha") ?? "",
-		bypassToken: process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
 	});
 
 	process.stdout.write(
