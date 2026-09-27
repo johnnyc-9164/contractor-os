@@ -3,6 +3,8 @@
 // Terminal transitions (Won/Lost/Disqualified) are not columns, so the card
 // exposes them as actions.
 
+import { Avatar, AvatarFallback } from "@contractor-os/ui/components/avatar";
+import { leadInitials } from "@/lib/lead-initials";
 import { LEGAL_TRANSITIONS, type LeadStage } from "./transitions";
 
 export interface PipelineLead {
@@ -52,8 +54,15 @@ export function LeadCard({
 	);
 	return (
 		<div className="rounded-md border border-border bg-card p-3 shadow-sm">
-			<div className="font-medium text-sm leading-tight">
-				{lead.title || lead.identifier}
+			<div className="flex items-start gap-2">
+				<Avatar aria-hidden="true" size="sm">
+					<AvatarFallback>
+						{leadInitials(lead.title, lead.identifier)}
+					</AvatarFallback>
+				</Avatar>
+				<div className="min-w-0 flex-1 break-words font-medium text-sm leading-tight">
+					{lead.title || lead.identifier}
+				</div>
 			</div>
 			<div className="mt-2 space-y-1 text-muted-foreground text-xs">
 				<div>

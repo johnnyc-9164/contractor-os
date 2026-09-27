@@ -7,6 +7,7 @@ export default defineConfig({
 			"packages/*/src/**/*.test.ts",
 			"packages/backend/convex/**/*.test.ts",
 			"apps/web/src/**/*.test.ts",
+			"tooling/sprite-factory/**/*.test.ts",
 		],
 	},
 });
