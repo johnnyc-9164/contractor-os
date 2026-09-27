@@ -4,13 +4,19 @@ import { api } from "@contractor-os/backend/convex/_generated/api";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 
+type DispatchResult = {
+	ok: boolean;
+	blockers?: Array<{ message?: string }>;
+};
+
 export function CreateLeadForm({ onCreated }: { onCreated?: () => void }) {
-	const createLead = useMutation(api.backend.co_create_lead);
+	const dispatch = useMutation(api.catalog.dispatch);
 	const [title, setTitle] = useState("");
 	const [client, setClient] = useState("");
 	const [description, setDescription] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [success, setSuccess] = useState<string | null>(null);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -20,18 +26,31 @@ export function CreateLeadForm({ onCreated }: { onCreated?: () => void }) {
 		}
 		setSubmitting(true);
 		setError(null);
+		setSuccess(null);
 		try {
-			await createLead({
-				requestKey: `lead-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-				input: {
+			const result: DispatchResult = await dispatch({
+				contract: "lead.capture",
+				schema_version: 1,
+				idempotency_key: crypto.randomUUID(),
+				payload: {
 					title: title.trim(),
-					client: client.trim(),
-					description: description.trim() || undefined,
+					source: "other",
+					contact_name: client.trim(),
+					notes: description.trim() || undefined,
 				},
 			});
+			if (!result.ok) {
+				setError(
+					result.blockers?.[0]?.message ?? "The server refused the lead.",
+				);
+				return;
+			}
 			setTitle("");
 			setClient("");
 			setDescription("");
+			setSuccess(
+				"Lead added to the pipeline. Start outreach from the leads board.",
+			);
 			onCreated?.();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to create lead.");
@@ -84,6 +103,9 @@ export function CreateLeadForm({ onCreated }: { onCreated?: () => void }) {
 			/>
 			{error && (
 				<div style={{ color: "red", fontSize: "0.875rem" }}>{error}</div>
+			)}
+			{success && (
+				<div style={{ color: "green", fontSize: "0.875rem" }}>{success}</div>
 			)}
 			<button
 				type="submit"
