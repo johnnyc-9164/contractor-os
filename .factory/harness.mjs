@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
 	appendFileSync,
@@ -11,7 +12,6 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const SCHEMA_VERSION = 1;
@@ -91,7 +91,10 @@ export function resolveRoot(explicitRoot = process.env.FACTORY_ROOT) {
 
 function safeSegment(value, label) {
 	if (!value || typeof value !== "string") fail(`${label} is required`);
-	const safe = value.trim().replace(/[^A-Za-z0-9._:-]+/g, "-").replace(/^-+|-+$/g, "");
+	const safe = value
+		.trim()
+		.replace(/[^A-Za-z0-9._:-]+/g, "-")
+		.replace(/^-+|-+$/g, "");
 	if (!safe) fail(`${label} has no usable characters`);
 	return safe.slice(0, 120);
 }
@@ -152,7 +155,11 @@ function appendEvent(root, state, event) {
 		task: state.task,
 		...event,
 	};
-	appendFileSync(eventsPath(root, state.run_id), `${JSON.stringify(entry)}\n`, "utf8");
+	appendFileSync(
+		eventsPath(root, state.run_id),
+		`${JSON.stringify(entry)}\n`,
+		"utf8",
+	);
 	state.last_event = entry;
 	state.phase = entry.phase ?? state.phase;
 	writeState(root, state);
@@ -162,7 +169,8 @@ function appendEvent(root, state, event) {
 export function startRun({ root = resolveRoot(), task, title = "", runId }) {
 	const safeTask = safeSegment(task, "task");
 	const id = safeSegment(
-		runId ?? `${now().replace(/[-:.]/g, "").replace("Z", "Z")}-${safeTask}-${randomUUID().slice(0, 8)}`,
+		runId ??
+			`${now().replace(/[-:.]/g, "").replace("Z", "Z")}-${safeTask}-${randomUUID().slice(0, 8)}`,
 		"run id",
 	);
 	const directory = runDirectory(root, id);
@@ -183,11 +191,22 @@ export function startRun({ root = resolveRoot(), task, title = "", runId }) {
 		verification: "not-run",
 	};
 	atomicWrite(statePath(root, id), state);
-	appendEvent(root, state, { type: "run.started", phase: "started", message: title });
+	appendEvent(root, state, {
+		type: "run.started",
+		phase: "started",
+		message: title,
+	});
 	return readState(root, id);
 }
 
-export function recordEvent({ root = resolveRoot(), runId, phase, message, type = "progress", evidence }) {
+export function recordEvent({
+	root = resolveRoot(),
+	runId,
+	phase,
+	message,
+	type = "progress",
+	evidence,
+}) {
 	const state = readState(root, runId);
 	if (state.status !== "running") fail(`run is terminal: ${runId}`);
 	return appendEvent(root, state, {
@@ -198,8 +217,14 @@ export function recordEvent({ root = resolveRoot(), runId, phase, message, type 
 	});
 }
 
-export function runCommand({ root = resolveRoot(), runId, phase = "execution", command }) {
-	if (!Array.isArray(command) || command.length === 0) fail("command is required after --");
+export function runCommand({
+	root = resolveRoot(),
+	runId,
+	phase = "execution",
+	command,
+}) {
+	if (!Array.isArray(command) || command.length === 0)
+		fail("command is required after --");
 	const state = readState(root, runId);
 	if (state.status !== "running") fail(`run is terminal: ${runId}`);
 	appendEvent(root, state, {
@@ -226,7 +251,8 @@ export function runCommand({ root = resolveRoot(), runId, phase = "execution", c
 }
 
 export function runGate({ root = resolveRoot(), runId, level = "full" }) {
-	if (!new Set(["fast", "full", "deep"]).has(level)) fail(`invalid gate level: ${level}`);
+	if (!new Set(["fast", "full", "deep"]).has(level))
+		fail(`invalid gate level: ${level}`);
 	const state = readState(root, runId);
 	if (state.status !== "running") fail(`run is terminal: ${runId}`);
 	appendEvent(root, state, {
@@ -248,12 +274,15 @@ export function runGate({ root = resolveRoot(), runId, level = "full" }) {
 		.split("\n")
 		.reverse()
 		.find((line) => line.startsWith("FACTORY_GATES:"));
-	const gateStatus = verdict?.match(/\bstatus=(GREEN|RED|MISCONFIGURED)\b/)?.[1] ?? "MISCONFIGURED";
+	const gateStatus =
+		verdict?.match(/\bstatus=(GREEN|RED|MISCONFIGURED)\b/)?.[1] ??
+		"MISCONFIGURED";
 	const refreshed = readState(root, runId);
 	refreshed.gates.push({
 		level,
 		status: gateStatus,
-		verdict: verdict ?? "FACTORY_GATES: status=MISCONFIGURED reason=missing-verdict",
+		verdict:
+			verdict ?? "FACTORY_GATES: status=MISCONFIGURED reason=missing-verdict",
 		exit_code: Number.isInteger(result.status) ? result.status : 2,
 		finished_at: now(),
 	});
@@ -277,7 +306,8 @@ export function finishRun({
 	verification = "not-run",
 	pullRequest = null,
 }) {
-	if (!TERMINAL_STATUSES.has(status)) fail(`invalid terminal status: ${status}`);
+	if (!TERMINAL_STATUSES.has(status))
+		fail(`invalid terminal status: ${status}`);
 	const state = readState(root, runId);
 	if (state.status !== "running") fail(`run is already terminal: ${runId}`);
 	const latestGate = state.gates.at(-1) ?? null;
@@ -306,9 +336,15 @@ export function finishRun({
 	const completed = readState(root, runId);
 	const durableDirectory = join(root, "docs", "factory", "runs");
 	mkdirSync(durableDirectory, { recursive: true });
-	const durablePath = join(durableDirectory, `${safeSegment(runId, "run id")}.json`);
+	const durablePath = join(
+		durableDirectory,
+		`${safeSegment(runId, "run id")}.json`,
+	);
 	const record = { ...completed, events: readEvents(root, runId) };
-	writeFileSync(durablePath, `${JSON.stringify(record, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+	writeFileSync(durablePath, `${JSON.stringify(record, null, 2)}\n`, {
+		encoding: "utf8",
+		flag: "wx",
+	});
 	return { ...completed, durable_path: durablePath };
 }
 
@@ -317,7 +353,9 @@ export function getStatus({ root = resolveRoot(), runId } = {}) {
 	const ids = runId
 		? [safeSegment(runId, "run id")]
 		: existsSync(base)
-			? readdirSync(base, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+			? readdirSync(base, { withFileTypes: true })
+					.filter((entry) => entry.isDirectory())
+					.map((entry) => entry.name)
 			: [];
 	const runs = ids
 		.filter((id) => existsSync(statePath(root, id)))
@@ -328,7 +366,9 @@ export function getStatus({ root = resolveRoot(), runId } = {}) {
 		repository: basename(root),
 		branch: git(root, ["branch", "--show-current"]) ?? "unknown",
 		head_sha: git(root, ["rev-parse", "HEAD"]) ?? "unknown",
-		working_tree: (git(root, ["status", "--short"]) ?? "").split("\n").filter(Boolean),
+		working_tree: (git(root, ["status", "--short"]) ?? "")
+			.split("\n")
+			.filter(Boolean),
 		runs,
 	};
 }
@@ -351,10 +391,18 @@ export function doctor({ root = resolveRoot() } = {}) {
 		})),
 		...commands.map((command) => ({
 			check: `command:${command}`,
-			status: spawnSync("sh", ["-lc", `command -v ${command}`], { cwd: root }).status === 0 ? "pass" : "fail",
+			status:
+				spawnSync("sh", ["-lc", `command -v ${command}`], { cwd: root })
+					.status === 0
+					? "pass"
+					: "fail",
 		})),
 	];
-	const environment = ["GITHUB_TOKEN", "SYMPHONY_WORKSPACE_ROOT", "SOURCE_REPO_URL"].map((key) => ({
+	const environment = [
+		"GITHUB_TOKEN",
+		"SYMPHONY_WORKSPACE_ROOT",
+		"SOURCE_REPO_URL",
+	].map((key) => ({
 		key,
 		present: Boolean(process.env[key]),
 	}));
@@ -373,7 +421,8 @@ function printHumanStatus(status) {
 			`${run.run_id}  ${run.status}  ${run.phase}  ${run.task}  ${run.last_event?.message ?? ""}\n`,
 		);
 	}
-	if (status.runs.length === 0) process.stdout.write("No factory runs found in this workspace.\n");
+	if (status.runs.length === 0)
+		process.stdout.write("No factory runs found in this workspace.\n");
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -382,7 +431,12 @@ export async function main(argv = process.argv.slice(2)) {
 	const root = resolveRoot(options.root);
 	switch (command) {
 		case "start": {
-			const state = startRun({ root, task: options.task, title: options.title, runId: options.run });
+			const state = startRun({
+				root,
+				task: options.task,
+				title: options.title,
+				runId: options.run,
+			});
 			process.stdout.write(`${JSON.stringify(state)}\n`);
 			return 0;
 		}
@@ -399,7 +453,12 @@ export async function main(argv = process.argv.slice(2)) {
 			return 0;
 		}
 		case "exec":
-			return runCommand({ root, runId: options.run, phase: options.phase, command: passthrough });
+			return runCommand({
+				root,
+				runId: options.run,
+				phase: options.phase,
+				command: passthrough,
+			});
 		case "gate":
 			return runGate({ root, runId: options.run, level: options.level });
 		case "finish": {
@@ -416,14 +475,20 @@ export async function main(argv = process.argv.slice(2)) {
 		}
 		case "status": {
 			const status = getStatus({ root, runId: options.run });
-			if (options.json) process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
+			if (options.json)
+				process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
 			else printHumanStatus(status);
 			return 0;
 		}
 		case "doctor": {
 			const result = doctor({ root });
-			if (options.json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-			else for (const check of result.checks) process.stdout.write(`${check.status.toUpperCase()}  ${check.check}\n`);
+			if (options.json)
+				process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+			else
+				for (const check of result.checks)
+					process.stdout.write(
+						`${check.status.toUpperCase()}  ${check.check}\n`,
+					);
 			return result.status === "pass" ? 0 : 1;
 		}
 		default:
