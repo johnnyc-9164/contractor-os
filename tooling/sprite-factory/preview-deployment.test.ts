@@ -88,16 +88,12 @@ describe("verifyPreviewDeployment", () => {
 		);
 	});
 
-	it("refuses a non-Contractor OS host before sending a bypass token", async () => {
+	it("refuses a non-Contractor OS host before making a request", async () => {
 		const fetcher = vi.fn();
 
 		await expect(
 			verifyPreviewDeployment(
-				{
-					...input,
-					previewUrl: "https://attacker.example",
-					bypassToken: "secret",
-				},
+				{ ...input, previewUrl: "https://attacker.example" },
 				fetcher,
 			),
 		).rejects.toThrow(
