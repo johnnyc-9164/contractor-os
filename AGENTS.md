@@ -95,3 +95,15 @@ with code spans; top node is the answer for understand/edit tasks),
 orientation. For current library docs use the Context7 MCP: resolve the exact
 library ID first, verify examples against installed versions, never send
 credentials or proprietary code.
+
+## Symphony factory harness
+
+- `WORKFLOW.md` is the Symphony service contract; `docs/factory/` defines the
+  charter, worker contract, state model, and upstream provenance.
+- Factory-dispatched implementation starts with the `factory-implement` skill
+  and an active `.factory/harness.mjs` run. Verification and status reporting
+  use the matching `factory-verify` and `factory-status` skills.
+- GitHub Issues and labels are the queue. Each issue owns one workspace, one
+  branch, one run ledger, and one durable run record in `docs/factory/runs/`.
+- Design implementation uses the installed UI skills in this order: extract
+  design system, retrieve/compose registry UI, evaluate fidelity, bind Convex.
