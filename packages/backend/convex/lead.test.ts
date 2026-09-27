@@ -102,7 +102,10 @@ describe("lead operation stage guards", () => {
 		["lead.qualify", { client_name: "client-1" }],
 		["lead.scheduleSiteVisit", { scheduled_at: "2099-01-01T00:00:00.000Z" }],
 		["lead.startScope", { scope_notes: "scope" }],
-		["lead.sendProposal", { amount_cents: 100000 }],
+		[
+			"lead.sendProposal",
+			{ amount_cents: 100000, estimate_version_id: "est_missing" },
+		],
 		["lead.submitBid", { bid_amount_cents: 100000 }],
 		["lead.award", {}],
 		["lead.win", {}],
@@ -134,6 +137,54 @@ describe("lead operation stage guards", () => {
 });
 
 describe("lead validation and authority", () => {
+	it("lead.sendProposal rejects unapproved and cross-lead estimate versions", async () => {
+		const t = setup();
+		const authed = await seedIdentity(
+			t,
+			"usr_johnny",
+			"principal",
+			JOHNNY_SUBJECT,
+		);
+		const leadId = await seedLead(t, "Scope In Progress");
+		await t.run(async (ctx) => {
+			const now = new Date().toISOString();
+			for (const [key, owner, status] of [
+				["est_unapproved", leadId, "draft"],
+				["est_other_lead", "lead_other", "approved"],
+			] as const) {
+				await ctx.db.insert("estimates", {
+					key,
+					version: 1,
+					status,
+					base_total_cents: 100000,
+					alternates: [],
+					exclusions: [],
+					markup_pct: 0,
+					margin_pct: 0,
+					lead_id: owner,
+					created_by: "system",
+					created_at: now,
+					updated_by: "system",
+					updated_at: now,
+					source: "test",
+					schema_version: 1,
+					company_id: "co_skys",
+				});
+			}
+		});
+		for (const estimate_version_id of ["est_unapproved", "est_other_lead"]) {
+			const response = await authed.mutation(
+				api.catalog.dispatch,
+				dispatchArgs(
+					"lead.sendProposal",
+					{ lead_id: leadId, amount_cents: 100000, estimate_version_id },
+					`proposal-${estimate_version_id}`,
+				),
+			);
+			expect(response.error?.code).toBe("GUARD_BLOCKED");
+		}
+	});
+
 	for (const contract of ["lead.disqualify", "lead.lose"]) {
 		it(`${contract} requires a reason`, async () => {
 			const t = setup();
@@ -308,11 +359,52 @@ describe("lead pipeline", () => {
 			scope_notes: "Prep and two coats",
 		});
 		expect(scope.entity_refs).toContain(`scope-${coLeadId}-v1`);
+		await t.run(async (ctx) => {
+			const now = new Date().toISOString();
+			await ctx.db.insert("estimates", {
+				key: "est_pipeline_v1",
+				version: 1,
+				status: "approved",
+				base_total_cents: 100000,
+				alternates: [],
+				exclusions: [],
+				markup_pct: 0,
+				margin_pct: 0,
+				lead_id: leadId,
+				formula_set_version: "estimate-formula-v1",
+				created_by: "system",
+				created_at: now,
+				updated_by: "system",
+				updated_at: now,
+				source: "test",
+				source_ref: "rs_pipeline",
+				schema_version: 1,
+				company_id: "co_skys",
+			});
+		});
+		const mismatch = await dispatch("lead.sendProposal", {
+			lead_id: leadId,
+			amount_cents: 99999,
+			estimate_version_id: "est_pipeline_v1",
+		});
+		expect(mismatch.error?.code).toBe("GUARD_BLOCKED");
 		const proposal = await dispatch("lead.sendProposal", {
 			lead_id: leadId,
 			amount_cents: 100000,
+			estimate_version_id: "est_pipeline_v1",
 		});
 		expect(proposal.entity_refs).toContain(`proposal-${coLeadId}-v1`);
+		expect(proposal.entity_refs).toContain("est_pipeline_v1");
+		const pinnedProposal = await t.run((ctx) =>
+			ctx.db
+				.query("proposals")
+				.withIndex("by_key", (q) => q.eq("key", `proposal-${coLeadId}-v1`))
+				.unique(),
+		);
+		expect(pinnedProposal).toMatchObject({
+			estimate_id: "est_pipeline_v1",
+			estimate_version: 1,
+		});
 		const bid = await dispatch("lead.submitBid", {
 			lead_id: leadId,
 			bid_amount_cents: 100000,

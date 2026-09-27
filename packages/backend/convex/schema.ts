@@ -196,12 +196,15 @@ export default defineSchema({
 			v.literal("anthony_review"),
 			v.literal("approved"),
 			v.literal("superseded"),
+			v.literal("rework"),
+			v.literal("abandoned"),
 		),
 		base_total_cents: v.number(), // integer cents
 		alternates: v.any(), // alternates as line-groups (JSON)
 		exclusions: v.any(), // exclusions list (JSON)
 		markup_pct: v.number(),
 		margin_pct: v.number(),
+		formula_set_version: v.optional(v.string()),
 		lead_id: v.optional(v.string()), // → leads.key
 		bid_id: v.optional(v.string()), // → bids.key
 	}).index("by_key", ["key"]),
@@ -219,6 +222,8 @@ export default defineSchema({
 		rate_row_id: v.optional(v.string()), // → rate_rows.key
 		scope_assembly_id: v.optional(v.string()),
 		extended_cost_cents: v.number(), // integer cents, engine-written
+		kind: v.optional(v.string()),
+		burdened_pct: v.optional(v.number()),
 	}).index("by_key", ["key"]),
 
 	// ── Entity 5: Proposal ──────────────────────────────────────────────────
@@ -600,7 +605,7 @@ export default defineSchema({
 		key: v.string(), // asm_*
 		owner_entity: v.string(), // polymorphic owner
 		statement: v.string(),
-		owner_user_id: v.string(), // → users.key
+		owner_user_id: v.optional(v.string()), // → users.key
 		status: v.union(
 			v.literal("open"),
 			v.literal("owned"),
