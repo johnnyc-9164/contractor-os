@@ -118,7 +118,8 @@ export function LeadDetailsSheet({
 									<div className="flex flex-wrap gap-2">
 										{transitions.map((target) => {
 											const requiresPrincipal =
-												target === "Awarded" && !isPrincipal;
+												(target === "Awarded" || target === "Won") &&
+												!isPrincipal;
 											return (
 												<Button
 													key={target}
@@ -131,7 +132,7 @@ export function LeadDetailsSheet({
 													disabled={requiresPrincipal}
 													title={
 														requiresPrincipal
-															? "Awarding requires principal authority"
+															? `Moving to ${target} requires principal authority`
 															: undefined
 													}
 													onClick={() => onTransition(lead, target)}
