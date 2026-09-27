@@ -20,14 +20,14 @@ import {
 	InputGroupInput,
 } from "@contractor-os/ui/components/input-group";
 import { Skeleton } from "@contractor-os/ui/components/skeleton";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import {
 	ArchiveIcon,
 	SearchIcon,
 	SlidersHorizontalIcon,
 	XIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMembership } from "../membership-provider";
 import {
@@ -46,6 +46,7 @@ import { LeadDetailsSheet } from "./lead-details-sheet";
 import {
 	countLeads,
 	filterLeadColumns,
+	findLeadById,
 	type LeadColumns,
 	leadMatchesQuery,
 } from "./pipeline-view";
@@ -142,18 +143,26 @@ export function PipelineBoard() {
 	const { role } = useMembership();
 	const isPrincipal = role === "admin";
 
-	const leadsResult = useQuery(api.backend.listLeads, {
-		paginationOpts: { numItems: 100, cursor: null },
-	});
+	const {
+		results: leadRecords,
+		status: leadPaginationStatus,
+		loadMore: loadMoreLeads,
+	} = usePaginatedQuery(api.backend.listLeads, {}, { initialNumItems: 100 });
 	const history = useQuery(api.backend.history, {
 		paginationOpts: { numItems: 100, cursor: null },
 	});
 	const dispatch = useMutation(api.catalog.dispatch);
 
+	useEffect(() => {
+		if (leadPaginationStatus === "CanLoadMore") {
+			loadMoreLeads(100);
+		}
+	}, [leadPaginationStatus, loadMoreLeads]);
+
 	const [columns, setColumns] = useState<LeadColumns | null>(null);
 	const [query, setQuery] = useState("");
 	const [showTerminal, setShowTerminal] = useState(false);
-	const [selectedLead, setSelectedLead] = useState<PipelineLead | null>(null);
+	const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 	const [pending, setPending] = useState<PendingTransition | null>(null);
 	const [pendingMove, setPendingMove] = useState<{
 		from: LeadStage;
@@ -173,12 +182,12 @@ export function PipelineBoard() {
 	}, [history]);
 
 	const seeded = useMemo<LeadColumns | null>(() => {
-		if (!leadsResult) return null;
+		if (leadPaginationStatus !== "Exhausted") return null;
 
 		const nextColumns: LeadColumns = {};
 		for (const stage of BOARD_COLUMNS) nextColumns[stage] = [];
 
-		for (const record of (leadsResult.page ?? []) as LeadRecord[]) {
+		for (const record of leadRecords as LeadRecord[]) {
 			const stage = toLeadStage(record.state);
 			if (!stage || TERMINAL_STAGES.includes(stage)) continue;
 
@@ -193,15 +202,15 @@ export function PipelineBoard() {
 		}
 
 		return nextColumns;
-	}, [leadsResult, lastHandledBy]);
+	}, [leadPaginationStatus, leadRecords, lastHandledBy]);
 
 	const activeColumns = columns ?? seeded;
 
 	const terminalLeads = useMemo<PipelineLead[]>(() => {
-		if (!leadsResult) return [];
+		if (leadPaginationStatus !== "Exhausted") return [];
 
 		const leads: PipelineLead[] = [];
-		for (const record of (leadsResult.page ?? []) as LeadRecord[]) {
+		for (const record of leadRecords as LeadRecord[]) {
 			const stage = toLeadStage(record.state);
 			if (!stage || !TERMINAL_STAGES.includes(stage)) continue;
 
@@ -215,7 +224,12 @@ export function PipelineBoard() {
 			});
 		}
 		return leads;
-	}, [leadsResult, lastHandledBy]);
+	}, [leadPaginationStatus, leadRecords, lastHandledBy]);
+
+	const selectedLead = useMemo(
+		() => findLeadById(seeded ?? {}, terminalLeads, selectedLeadId),
+		[seeded, selectedLeadId, terminalLeads],
+	);
 
 	const displayedColumns = useMemo(
 		() => (activeColumns ? filterLeadColumns(activeColumns, query) : null),
@@ -281,7 +295,7 @@ export function PipelineBoard() {
 			return;
 		}
 
-		setSelectedLead(null);
+		setSelectedLeadId(null);
 
 		if (needsDialog(contract)) {
 			setPendingMove({ from: lead.stage, to, leadId: lead.id });
@@ -482,14 +496,18 @@ export function PipelineBoard() {
 												{hasQuery ? (
 													<LeadCard
 														lead={lead}
-														onSelect={setSelectedLead}
+														onSelect={(selected) =>
+															setSelectedLeadId(selected.id)
+														}
 														onTerminalMove={requestTransition}
 													/>
 												) : (
 													<KanbanItemHandle>
 														<LeadCard
 															lead={lead}
-															onSelect={setSelectedLead}
+															onSelect={(selected) =>
+																setSelectedLeadId(selected.id)
+															}
 															onTerminalMove={requestTransition}
 														/>
 													</KanbanItemHandle>
@@ -569,7 +587,9 @@ export function PipelineBoard() {
 												<LeadCard
 													key={lead.id}
 													lead={lead}
-													onSelect={setSelectedLead}
+													onSelect={(selected) =>
+														setSelectedLeadId(selected.id)
+													}
 													onTerminalMove={requestTransition}
 												/>
 											))}
@@ -586,7 +606,7 @@ export function PipelineBoard() {
 				lead={selectedLead}
 				isPrincipal={isPrincipal}
 				onOpenChange={(open) => {
-					if (!open) setSelectedLead(null);
+					if (!open) setSelectedLeadId(null);
 				}}
 				onTransition={requestTransition}
 			/>
