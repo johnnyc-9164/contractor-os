@@ -1,11 +1,32 @@
-// TC-APP-01: Kanban pipeline board for the painting lead lifecycle.
-// Assembles the ReUI kanban (Radix flavor). Drags dispatch catalog ops;
-// illegal transitions are refused at the pointer; blocked dispatches roll back.
+// TC-APP-01: Live lead work surface for the painting lifecycle.
+// S36 supplies the layout direction; Convex data and catalog dispatch remain
+// authoritative for records, tenant boundaries, and legal stage transitions.
 
 "use client";
 
 import { api } from "@contractor-os/backend/convex/_generated/api";
+import { Button } from "@contractor-os/ui/components/button";
+import {
+	Empty,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
+} from "@contractor-os/ui/components/empty";
+import {
+	InputGroup,
+	InputGroupAddon,
+	InputGroupButton,
+	InputGroupInput,
+} from "@contractor-os/ui/components/input-group";
+import { Skeleton } from "@contractor-os/ui/components/skeleton";
 import { useMutation, useQuery } from "convex/react";
+import {
+	ArchiveIcon,
+	SearchIcon,
+	SlidersHorizontalIcon,
+	XIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMembership } from "../membership-provider";
@@ -21,6 +42,13 @@ import {
 	KanbanOverlay,
 } from "./kanban";
 import { LeadCard, type PipelineLead } from "./lead-card";
+import { LeadDetailsSheet } from "./lead-details-sheet";
+import {
+	countLeads,
+	filterLeadColumns,
+	type LeadColumns,
+	leadMatchesQuery,
+} from "./pipeline-view";
 import { type PendingTransition, TransitionDialog } from "./transition-dialog";
 import {
 	BOARD_COLUMNS,
@@ -32,8 +60,6 @@ import {
 	TERMINAL_STAGES,
 } from "./transitions";
 
-type Columns = Record<string, PipelineLead[]>;
-
 interface HistoryEvent {
 	id: string;
 	identifier: string;
@@ -41,13 +67,75 @@ interface HistoryEvent {
 	occurredAt: number;
 }
 
+interface LeadRecord {
+	id: string;
+	identifier: string;
+	title: string | null;
+	state: string;
+	updatedAt: number;
+}
+
 function toLeadStage(state: string): LeadStage | null {
-	// listLeads returns display-name stages; accept both forms defensively.
 	const normalized = state.trim();
 	const all: LeadStage[] = [...BOARD_COLUMNS, ...TERMINAL_STAGES];
 	return (all as string[]).includes(normalized)
 		? (normalized as LeadStage)
 		: null;
+}
+
+function findLead(columns: LeadColumns, leadId: string) {
+	for (const [stage, items] of Object.entries(columns)) {
+		const index = items.findIndex((lead) => lead.id === leadId);
+		if (index >= 0) {
+			return { stage: stage as LeadStage, index, lead: items[index] };
+		}
+	}
+	return null;
+}
+
+function applyMove(
+	columns: LeadColumns,
+	from: LeadStage,
+	to: LeadStage,
+	leadId: string,
+): LeadColumns {
+	const next: LeadColumns = { ...columns };
+	const fromItems = [...(next[from] ?? [])];
+	const index = fromItems.findIndex((lead) => lead.id === leadId);
+	if (index < 0) return columns;
+
+	const [moved] = fromItems.splice(index, 1);
+	next[from] = fromItems;
+
+	if (from !== to) {
+		if ((BOARD_COLUMNS as string[]).includes(to)) {
+			next[to] = [...(next[to] ?? []), { ...moved, stage: to }];
+		}
+	} else {
+		fromItems.splice(index, 0, moved);
+		next[from] = fromItems;
+	}
+
+	return next;
+}
+
+function PipelineLoading() {
+	return (
+		<div
+			className="grid auto-cols-[min(84vw,20rem)] grid-flow-col gap-4 overflow-hidden"
+			role="status"
+			aria-live="polite"
+		>
+			<span className="sr-only">Loading lead pipeline</span>
+			{BOARD_COLUMNS.slice(0, 3).map((stage) => (
+				<div key={stage} className="flex flex-col gap-3 border p-3">
+					<Skeleton className="h-5 w-28" />
+					<Skeleton className="h-36 w-full" />
+					<Skeleton className="h-28 w-full" />
+				</div>
+			))}
+		</div>
+	);
 }
 
 export function PipelineBoard() {
@@ -62,120 +150,86 @@ export function PipelineBoard() {
 	});
 	const dispatch = useMutation(api.catalog.dispatch);
 
-	const [columns, setColumns] = useState<Columns | null>(null);
+	const [columns, setColumns] = useState<LeadColumns | null>(null);
+	const [query, setQuery] = useState("");
 	const [showTerminal, setShowTerminal] = useState(false);
+	const [selectedLead, setSelectedLead] = useState<PipelineLead | null>(null);
 	const [pending, setPending] = useState<PendingTransition | null>(null);
-	// pendingMove.leadId is the board-internal card id (matches applyMove's
-	// l.id lookup). The dispatch identifier lives on pending.leadId instead.
 	const [pendingMove, setPendingMove] = useState<{
 		from: LeadStage;
 		to: LeadStage;
 		leadId: string;
 	} | null>(null);
 
-	// Last handler per lead identifier, for the "owner/assigned" line.
 	const lastHandledBy = useMemo(() => {
 		const map = new Map<string, HistoryEvent>();
 		for (const event of (history?.page ?? []) as HistoryEvent[]) {
-			const prev = map.get(event.identifier);
-			if (!prev || event.occurredAt > prev.occurredAt)
+			const previous = map.get(event.identifier);
+			if (!previous || event.occurredAt > previous.occurredAt) {
 				map.set(event.identifier, event);
+			}
 		}
 		return map;
 	}, [history]);
 
-	// Seed columns from the query once; afterwards the board owns the state
-	// optimistically and the query refreshes it on refetch.
-	const seeded = useMemo<Columns | null>(() => {
+	const seeded = useMemo<LeadColumns | null>(() => {
 		if (!leadsResult) return null;
-		const cols: Columns = {};
-		for (const s of BOARD_COLUMNS) cols[s] = [];
-		for (const raw of (leadsResult.page ?? []) as Array<{
-			id: string;
-			identifier: string;
-			title: string | null;
-			state: string;
-			updatedAt: number;
-		}>) {
-			const stage = toLeadStage(raw.state);
+
+		const nextColumns: LeadColumns = {};
+		for (const stage of BOARD_COLUMNS) nextColumns[stage] = [];
+
+		for (const record of (leadsResult.page ?? []) as LeadRecord[]) {
+			const stage = toLeadStage(record.state);
 			if (!stage || TERMINAL_STAGES.includes(stage)) continue;
-			cols[stage].push({
-				id: raw.id,
-				identifier: raw.identifier,
-				title: raw.title,
+
+			nextColumns[stage].push({
+				id: record.id,
+				identifier: record.identifier,
+				title: record.title,
 				stage,
-				updatedAt: raw.updatedAt,
-				lastHandledBy: lastHandledBy.get(raw.identifier)?.actorId ?? null,
+				updatedAt: record.updatedAt,
+				lastHandledBy: lastHandledBy.get(record.identifier)?.actorId ?? null,
 			});
 		}
-		return cols;
+
+		return nextColumns;
 	}, [leadsResult, lastHandledBy]);
 
 	const activeColumns = columns ?? seeded;
 
 	const terminalLeads = useMemo<PipelineLead[]>(() => {
 		if (!leadsResult) return [];
-		const out: PipelineLead[] = [];
-		for (const raw of (leadsResult.page ?? []) as Array<{
-			id: string;
-			identifier: string;
-			title: string | null;
-			state: string;
-			updatedAt: number;
-		}>) {
-			const stage = toLeadStage(raw.state);
+
+		const leads: PipelineLead[] = [];
+		for (const record of (leadsResult.page ?? []) as LeadRecord[]) {
+			const stage = toLeadStage(record.state);
 			if (!stage || !TERMINAL_STAGES.includes(stage)) continue;
-			out.push({
-				id: raw.id,
-				identifier: raw.identifier,
-				title: raw.title,
+
+			leads.push({
+				id: record.id,
+				identifier: record.identifier,
+				title: record.title,
 				stage,
-				updatedAt: raw.updatedAt,
-				lastHandledBy: lastHandledBy.get(raw.identifier)?.actorId ?? null,
+				updatedAt: record.updatedAt,
+				lastHandledBy: lastHandledBy.get(record.identifier)?.actorId ?? null,
 			});
 		}
-		return out;
+		return leads;
 	}, [leadsResult, lastHandledBy]);
 
-	const findLead = (cols: Columns, leadId: string) => {
-		for (const [stage, items] of Object.entries(cols)) {
-			const idx = items.findIndex((l) => l.id === leadId);
-			if (idx >= 0)
-				return { stage: stage as LeadStage, index: idx, lead: items[idx] };
-		}
-		return null;
-	};
-
-	const applyMove = (
-		cols: Columns,
-		from: LeadStage,
-		to: LeadStage,
-		leadId: string,
-	): Columns => {
-		const next: Columns = { ...cols };
-		const fromItems = [...(next[from] ?? [])];
-		const idx = fromItems.findIndex((l) => l.id === leadId);
-		if (idx < 0) return cols;
-		const [moved] = fromItems.splice(idx, 1);
-		next[from] = fromItems;
-		if (from !== to) {
-			// Terminal stages are not board columns; a move there removes the card.
-			if ((BOARD_COLUMNS as string[]).includes(to)) {
-				next[to] = [...(next[to] ?? []), { ...moved, stage: to }];
-			}
-		} else {
-			// Same-column reorder: put it back at the end (dnd-kit gives the
-			// target index via onMove; we use it when provided).
-			fromItems.splice(idx, 0, moved);
-			next[from] = fromItems;
-		}
-		return next;
-	};
+	const displayedColumns = useMemo(
+		() => (activeColumns ? filterLeadColumns(activeColumns, query) : null),
+		[activeColumns, query],
+	);
+	const displayedTerminalLeads = useMemo(
+		() => terminalLeads.filter((lead) => leadMatchesQuery(lead, query)),
+		[query, terminalLeads],
+	);
 
 	const runDispatch = async (
 		contract: string,
 		payload: Record<string, unknown>,
-		rollbackTo: Columns,
+		rollbackTo: LeadColumns,
 		successLabel: string,
 	) => {
 		let result: { ok: boolean; blockers?: Array<{ message?: string }> };
@@ -186,13 +240,14 @@ export function PipelineBoard() {
 				idempotency_key: crypto.randomUUID(),
 				payload,
 			});
-		} catch (err) {
+		} catch (error) {
 			setColumns(rollbackTo);
 			toast.error(
-				`Move failed: ${err instanceof Error ? err.message : "unknown error"}`,
+				`Move failed: ${error instanceof Error ? error.message : "unknown error"}`,
 			);
 			return;
 		}
+
 		if (!result.ok) {
 			setColumns(rollbackTo);
 			const reason =
@@ -200,19 +255,67 @@ export function PipelineBoard() {
 			toast.error(`Move blocked: ${reason}`);
 			return;
 		}
+
+		setColumns(null);
 		toast.success(successLabel);
+	};
+
+	const requestTransition = (lead: PipelineLead, to: LeadStage) => {
+		if (!activeColumns) return;
+
+		if (!isLegalTransition(lead.stage, to)) {
+			toast.error(`Cannot move a lead from ${lead.stage} to ${to}.`);
+			return;
+		}
+
+		const contract = opForTransition(lead.stage, to);
+		if (!contract) {
+			toast.error(`No operation maps ${lead.stage} to ${to}.`);
+			return;
+		}
+
+		if (contract === "lead.award" && !isPrincipal) {
+			toast.error(
+				"Awarding a job requires principal authority. Ask an admin to award this bid.",
+			);
+			return;
+		}
+
+		setSelectedLead(null);
+
+		if (needsDialog(contract)) {
+			setPendingMove({ from: lead.stage, to, leadId: lead.id });
+			setPending({
+				leadId: lead.identifier,
+				leadTitle: lead.title || lead.identifier,
+				from: lead.stage,
+				to,
+				contract,
+				fields: DIALOG_FIELDS[contract],
+			});
+			return;
+		}
+
+		const rollbackTo = activeColumns;
+		setColumns(applyMove(activeColumns, lead.stage, to, lead.id));
+		void runDispatch(
+			contract,
+			{ lead_id: lead.identifier },
+			rollbackTo,
+			`Moved to ${to}`,
+		);
 	};
 
 	const handleMove = (event: KanbanMoveEvent) => {
 		if (!activeColumns) return;
+
 		const from = event.activeContainer as LeadStage;
 		const to = event.overContainer as LeadStage;
 		const found = findLead(activeColumns, event.event.active.id as string);
 		if (!found) return;
 
-		// Same-column reorder: apply locally, no op.
 		if (from === to) {
-			const next: Columns = { ...activeColumns };
+			const next: LeadColumns = { ...activeColumns };
 			const items = [...next[from]];
 			const [moved] = items.splice(found.index, 1);
 			items.splice(event.overIndex, 0, moved);
@@ -221,53 +324,12 @@ export function PipelineBoard() {
 			return;
 		}
 
-		// Refuse illegal transitions at the pointer.
-		if (!isLegalTransition(from, to)) {
-			toast.error(`Cannot move a lead from ${from} to ${to}.`);
-			return;
-		}
-
-		const contract = opForTransition(from, to);
-		if (!contract) {
-			toast.error(`No operation maps ${from} to ${to}.`);
-			return;
-		}
-
-		// lead.award is principal-only.
-		if (contract === "lead.award" && !isPrincipal) {
-			toast.error(
-				"Awarding a job requires principal authority. Ask an admin to award this bid.",
-			);
-			return;
-		}
-
-		// Ops needing more than lead_id open the field dialog on drop.
-		if (needsDialog(contract)) {
-			setPendingMove({ from, to, leadId: found.lead.id });
-			setPending({
-				leadId: found.lead.identifier,
-				leadTitle: found.lead.title || found.lead.identifier,
-				from,
-				to,
-				contract,
-				fields: DIALOG_FIELDS[contract],
-			});
-			return;
-		}
-
-		// Optimistic apply, then dispatch; roll back on a blocked envelope.
-		const rollbackTo = activeColumns;
-		setColumns(applyMove(activeColumns, from, to, found.lead.id));
-		void runDispatch(
-			contract,
-			{ lead_id: found.lead.identifier },
-			rollbackTo,
-			`Moved to ${to}`,
-		);
+		requestTransition(found.lead, to);
 	};
 
 	const handleDialogConfirm = (payload: Record<string, unknown>) => {
 		if (!pending || !pendingMove || !activeColumns) return;
+
 		const { from, to, leadId } = pendingMove;
 		const contract = pending.contract;
 		const rollbackTo = activeColumns;
@@ -282,183 +344,253 @@ export function PipelineBoard() {
 		setPendingMove(null);
 	};
 
-	const handleTerminalMove = (lead: PipelineLead, to: LeadStage) => {
-		if (!activeColumns) return;
-		if (!isLegalTransition(lead.stage, to)) {
-			toast.error(`Cannot move a lead from ${lead.stage} to ${to}.`);
-			return;
-		}
-		const contract = opForTransition(lead.stage, to);
-		if (!contract) {
-			toast.error(`No operation maps ${lead.stage} to ${to}.`);
-			return;
-		}
-		// Terminal moves go through the dialog when fields are required.
-		if (needsDialog(contract)) {
-			setPendingMove({ from: lead.stage, to, leadId: lead.id });
-			setPending({
-				leadId: lead.identifier,
-				leadTitle: lead.title || lead.identifier,
-				from: lead.stage,
-				to,
-				contract,
-				fields: DIALOG_FIELDS[contract],
-			});
-			return;
-		}
-		// lead.win needs only lead_id: apply (removes the card) and dispatch.
-		const rollbackTo = activeColumns;
-		setColumns(applyMove(activeColumns, lead.stage, to, lead.id));
-		void runDispatch(
-			contract,
-			{ lead_id: lead.identifier },
-			rollbackTo,
-			`Moved to ${to}`,
-		);
-	};
-
-	const handleReopen = (lead: PipelineLead) => {
-		if (!activeColumns) return;
-		if (!isLegalTransition(lead.stage, "Prospect")) {
-			toast.error(`Cannot re-open a lead from ${lead.stage}.`);
-			return;
-		}
-		// Re-open needs a reason; route through the dialog without a board move.
-		setPendingMove({ from: lead.stage, to: "Prospect", leadId: lead.id });
-		setPending({
-			leadId: lead.identifier,
-			leadTitle: lead.title || lead.identifier,
-			from: lead.stage,
-			to: "Prospect",
-			contract: "lead.reopen",
-			fields: DIALOG_FIELDS["lead.reopen"],
-		});
-	};
-
-	if (!activeColumns) {
-		return (
-			<p className="py-16 text-center text-muted-foreground text-sm">
-				Loading pipeline…
-			</p>
-		);
+	if (!activeColumns || !displayedColumns) {
+		return <PipelineLoading />;
 	}
 
+	const hasQuery = query.trim().length > 0;
+	const activeCount = countLeads(activeColumns);
+	const displayedCount = countLeads(displayedColumns);
+
 	return (
-		<div>
-			<div className="mb-4 flex items-center justify-between">
-				<p className="text-muted-foreground text-sm">
-					Drag a card to move the lead. Illegal moves are refused; blocked moves
-					snap back with the reason.
-					{!isPrincipal && (
-						<span className="ml-2 font-medium text-foreground/80">
-							Awarding requires principal authority.
-						</span>
-					)}
-				</p>
-				<button
-					type="button"
-					onClick={() => setShowTerminal((v) => !v)}
-					aria-pressed={showTerminal}
-					className="rounded-md border border-input px-3 py-1.5 text-sm hover:bg-muted"
-				>
-					{showTerminal ? "Hide" : "Show"} completed ({terminalLeads.length})
-				</button>
+		<div className="flex min-w-0 flex-col gap-5">
+			<div className="flex flex-col gap-3 border-y py-3 md:flex-row md:items-center md:justify-between">
+				<InputGroup className="max-w-md">
+					<InputGroupAddon>
+						<SearchIcon aria-hidden="true" />
+					</InputGroupAddon>
+					<InputGroupInput
+						type="search"
+						value={query}
+						onChange={(event) => setQuery(event.target.value)}
+						placeholder="Search leads"
+						aria-label="Search leads"
+					/>
+					{hasQuery ? (
+						<InputGroupAddon align="inline-end">
+							<InputGroupButton
+								type="button"
+								size="icon-xs"
+								onClick={() => setQuery("")}
+								aria-label="Clear lead search"
+							>
+								<XIcon data-icon="inline-start" />
+							</InputGroupButton>
+						</InputGroupAddon>
+					) : null}
+				</InputGroup>
+
+				<div className="flex flex-wrap items-center justify-between gap-3 md:justify-end">
+					<p className="text-muted-foreground text-xs" aria-live="polite">
+						{hasQuery
+							? `${displayedCount} matching active lead${displayedCount === 1 ? "" : "s"}`
+							: `${activeCount} active lead${activeCount === 1 ? "" : "s"}`}
+						{hasQuery ? " · Clear search to drag cards" : ""}
+					</p>
+					<Button
+						type="button"
+						variant="outline"
+						onClick={() => setShowTerminal((current) => !current)}
+						aria-pressed={showTerminal}
+					>
+						<ArchiveIcon data-icon="inline-start" />
+						{showTerminal ? "Hide" : "Show"} completed ({terminalLeads.length})
+					</Button>
+				</div>
 			</div>
 
-			<Kanban
-				value={activeColumns}
-				onValueChange={setColumns}
-				getItemValue={(item) => item.id}
-				onMove={handleMove}
-			>
-				<KanbanBoard className="grid auto-cols-[280px] grid-flow-col gap-4 overflow-x-auto pb-4">
-					{BOARD_COLUMNS.map((stage) => (
-						<KanbanColumn
-							key={stage}
-							value={stage}
-							className="flex max-h-[70vh] flex-col rounded-lg border border-border bg-muted/30"
-						>
-							<KanbanColumnHandle className="flex items-center justify-between px-3 py-2">
-								<h3 className="font-medium text-sm">{stage}</h3>
-								<span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground text-xs tabular-nums">
-									{activeColumns[stage]?.length ?? 0}
-								</span>
-								{stage === "Awarded" && !isPrincipal && (
-									<span
-										title="Awarding a job requires principal authority"
-										className="cursor-help text-muted-foreground text-xs"
-									>
-										Locked
-									</span>
-								)}
-							</KanbanColumnHandle>
-							<KanbanColumnContent
-								value={stage}
-								className="flex flex-col gap-2 overflow-y-auto p-2"
-							>
-								{(activeColumns[stage] ?? []).map((lead) => (
-									<KanbanItem key={lead.id} value={lead.id}>
-										<KanbanItemHandle>
-											<LeadCard
-												lead={lead}
-												onTerminalMove={handleTerminalMove}
-											/>
-										</KanbanItemHandle>
-									</KanbanItem>
-								))}
-							</KanbanColumnContent>
-						</KanbanColumn>
-					))}
-				</KanbanBoard>
-				<KanbanOverlay>
-					<div className="size-full rounded-md bg-muted" />
-				</KanbanOverlay>
-			</Kanban>
+			<div className="flex items-start gap-2 text-muted-foreground text-xs [&>svg]:size-4 [&>svg]:shrink-0">
+				<SlidersHorizontalIcon aria-hidden="true" />
+				<p>
+					Open a card for its live record and keyboard-accessible stage actions.
+					Drag cards when search is clear. Server guards remain authoritative
+					and rejected moves roll back.
+					{!isPrincipal ? " Awarding requires principal authority." : ""}
+				</p>
+			</div>
 
-			{showTerminal && (
-				<section aria-label="Completed leads" className="mt-8">
-					<h2 className="mb-3 font-medium text-base">Completed</h2>
-					{terminalLeads.length === 0 ? (
-						<p className="text-muted-foreground text-sm">No completed leads.</p>
+			{activeCount === 0 ? (
+				<Empty className="border">
+					<EmptyHeader>
+						<EmptyMedia variant="icon">
+							<ArchiveIcon aria-hidden="true" />
+						</EmptyMedia>
+						<EmptyTitle>No active leads</EmptyTitle>
+						<EmptyDescription>
+							New tenant-scoped lead records will appear here as they enter the
+							pipeline.
+						</EmptyDescription>
+					</EmptyHeader>
+				</Empty>
+			) : displayedCount === 0 ? (
+				<Empty className="border">
+					<EmptyHeader>
+						<EmptyMedia variant="icon">
+							<SearchIcon aria-hidden="true" />
+						</EmptyMedia>
+						<EmptyTitle>No matching active leads</EmptyTitle>
+						<EmptyDescription>
+							Try a lead name, record identifier, stage, or last handler.
+						</EmptyDescription>
+					</EmptyHeader>
+				</Empty>
+			) : (
+				<Kanban
+					value={displayedColumns}
+					onValueChange={hasQuery ? () => undefined : setColumns}
+					getItemValue={(item) => item.id}
+					onMove={handleMove}
+				>
+					<KanbanBoard className="grid snap-x auto-cols-[min(84vw,20rem)] grid-flow-col gap-4 overflow-x-auto pb-4 sm:auto-cols-[20rem]">
+						{BOARD_COLUMNS.map((stage) => (
+							<KanbanColumn
+								key={stage}
+								value={stage}
+								className="flex max-h-[68vh] snap-start flex-col border bg-muted/30"
+							>
+								<KanbanColumnHandle className="flex items-center gap-2 border-b px-3 py-2.5">
+									<span
+										className="size-2 shrink-0 rounded-full bg-primary"
+										aria-hidden="true"
+									/>
+									<h3 className="min-w-0 flex-1 truncate font-medium text-xs uppercase tracking-wide">
+										{stage}
+									</h3>
+									<span className="text-muted-foreground text-xs tabular-nums">
+										{displayedColumns[stage]?.length ?? 0}
+									</span>
+									{stage === "Awarded" && !isPrincipal ? (
+										<span
+											title="Awarding a job requires principal authority"
+											className="cursor-help text-muted-foreground text-xs"
+										>
+											Locked
+										</span>
+									) : null}
+								</KanbanColumnHandle>
+								<KanbanColumnContent
+									value={stage}
+									className="flex min-h-28 flex-col gap-2 overflow-y-auto p-2"
+								>
+									{(displayedColumns[stage] ?? []).length > 0 ? (
+										(displayedColumns[stage] ?? []).map((lead) => (
+											<KanbanItem
+												key={lead.id}
+												value={lead.id}
+												disabled={hasQuery}
+												className="data-[disabled=true]:opacity-100"
+											>
+												{hasQuery ? (
+													<LeadCard
+														lead={lead}
+														onSelect={setSelectedLead}
+														onTerminalMove={requestTransition}
+													/>
+												) : (
+													<KanbanItemHandle>
+														<LeadCard
+															lead={lead}
+															onSelect={setSelectedLead}
+															onTerminalMove={requestTransition}
+														/>
+													</KanbanItemHandle>
+												)}
+											</KanbanItem>
+										))
+									) : (
+										<p className="px-2 py-6 text-center text-muted-foreground text-xs">
+											{hasQuery
+												? "No matching leads"
+												: "No leads in this stage"}
+										</p>
+									)}
+								</KanbanColumnContent>
+							</KanbanColumn>
+						))}
+					</KanbanBoard>
+					<KanbanOverlay>
+						<div className="size-full bg-muted" />
+					</KanbanOverlay>
+				</Kanban>
+			)}
+
+			{showTerminal ? (
+				<section aria-labelledby="completed-leads-heading">
+					<div className="mb-3 flex items-end justify-between gap-3">
+						<div>
+							<h2
+								id="completed-leads-heading"
+								className="font-medium text-base"
+							>
+								Completed leads
+							</h2>
+							<p className="text-muted-foreground text-xs">
+								Won, lost, and disqualified records.
+							</p>
+						</div>
+						<span className="text-muted-foreground text-xs tabular-nums">
+							{displayedTerminalLeads.length} shown
+						</span>
+					</div>
+
+					{displayedTerminalLeads.length === 0 ? (
+						<Empty className="border">
+							<EmptyHeader>
+								<EmptyTitle>
+									{hasQuery
+										? "No matching completed leads"
+										: "No completed leads"}
+								</EmptyTitle>
+								<EmptyDescription>
+									Completed lead records will stay available here for review.
+								</EmptyDescription>
+							</EmptyHeader>
+						</Empty>
 					) : (
-						<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+						<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
 							{TERMINAL_STAGES.map((stage) => {
-								const items = terminalLeads.filter((l) => l.stage === stage);
+								const items = displayedTerminalLeads.filter(
+									(lead) => lead.stage === stage,
+								);
 								if (items.length === 0) return null;
+
 								return (
-									<div
-										key={stage}
-										className="rounded-lg border border-border bg-muted/30 p-3"
-									>
-										<h3 className="mb-2 font-medium text-sm">
+									<section key={stage} aria-labelledby={`completed-${stage}`}>
+										<h3
+											id={`completed-${stage}`}
+											className="mb-2 font-medium text-xs uppercase tracking-wide"
+										>
 											{stage}{" "}
 											<span className="text-muted-foreground">
 												({items.length})
 											</span>
 										</h3>
-										<div className="space-y-2">
+										<div className="flex flex-col gap-2">
 											{items.map((lead) => (
-												<div key={lead.id}>
-													<LeadCard lead={lead} />
-													{(stage === "Lost" || stage === "Disqualified") && (
-														<button
-															type="button"
-															onClick={() => handleReopen(lead)}
-															className="mt-1 rounded-md border border-input px-2 py-1 text-xs hover:bg-muted"
-														>
-															Re-open as Prospect
-														</button>
-													)}
-												</div>
+												<LeadCard
+													key={lead.id}
+													lead={lead}
+													onSelect={setSelectedLead}
+													onTerminalMove={requestTransition}
+												/>
 											))}
 										</div>
-									</div>
+									</section>
 								);
 							})}
 						</div>
 					)}
 				</section>
-			)}
+			) : null}
+
+			<LeadDetailsSheet
+				lead={selectedLead}
+				isPrincipal={isPrincipal}
+				onOpenChange={(open) => {
+					if (!open) setSelectedLead(null);
+				}}
+				onTransition={requestTransition}
+			/>
 
 			<TransitionDialog
 				pending={pending}
