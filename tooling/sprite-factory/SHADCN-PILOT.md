@@ -56,3 +56,5 @@ The endpoint is external and best-effort; service terms, free limits, and availa
 - `vitest.config.ts`
 
 The new Vitest glob includes the factory triage tests in normal repository runs.
+
+The committed-head triage run (`5e9b20055b38a11b02e16b65352833d918375e7b` against the base above) produced local deep-review recommendations for the triage tooling, report, and Vitest config. The four ordinary application/UI files fell back to standard review because the remote result did not meet the confidence threshold (the endpoint's response is not treated as review evidence). Every result retained both mandatory gates.
