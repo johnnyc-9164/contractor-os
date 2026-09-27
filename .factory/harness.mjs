@@ -359,6 +359,8 @@ export function finalizeRun({ root = resolveRoot(), runId, candidateSha }) {
 	if (dirty.length > 0) {
 		fail(`candidate working tree is not clean: ${dirty.join(", ")}`);
 	}
+	const candidateBranch = git(root, ["branch", "--show-current"]);
+	if (!candidateBranch) fail("candidate HEAD must be attached to a branch");
 	const durableDirectory = join(root, "docs", "factory", "runs");
 	mkdirSync(durableDirectory, { recursive: true });
 	const durablePath = join(
@@ -367,7 +369,9 @@ export function finalizeRun({ root = resolveRoot(), runId, candidateSha }) {
 	);
 	const record = {
 		...completed,
+		worker_branch: completed.branch,
 		worker_head_sha: completed.head_sha,
+		branch: candidateBranch,
 		head_sha: candidateSha,
 		candidate_sha: candidateSha,
 		finalized_at: now(),

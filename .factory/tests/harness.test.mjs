@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
 	doctor,
@@ -50,6 +51,7 @@ function repository() {
 	writeFileSync(join(root, "tracked.txt"), "baseline\n", "utf8");
 	execFileSync("git", ["add", "."], { cwd: root });
 	execFileSync("git", ["commit", "-qm", "baseline"], { cwd: root });
+	execFileSync("git", ["branch", "-M", "master"], { cwd: root });
 	return root;
 }
 
@@ -58,7 +60,6 @@ test("run lifecycle produces observable and durable evidence", () => {
 	execFileSync("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], {
 		cwd: root,
 	});
-	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
 	const state = startRun({
 		root,
 		task: "COS-76",
@@ -103,6 +104,7 @@ test("run lifecycle produces observable and durable evidence", () => {
 	const durablePath = join(root, "docs/factory/runs/run-COS-76.json");
 	assert.equal(existsSync(durablePath), false);
 
+	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
 	execFileSync("git", ["add", "tracked.txt"], { cwd: root });
 	execFileSync("git", ["commit", "-qm", "candidate"], { cwd: root });
 	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -119,6 +121,8 @@ test("run lifecycle produces observable and durable evidence", () => {
 	assert.ok(durable.events.length >= 5);
 	assert.equal(durable.summary, "Lead flow ready for controller review");
 	assert.deepEqual(durable.changed_files, ["tracked.txt"]);
+	assert.equal(durable.worker_branch, "master");
+	assert.equal(durable.branch, "candidate");
 	assert.equal(durable.head_sha, candidateSha);
 	assert.notEqual(durable.worker_head_sha, candidateSha);
 	assert.equal(getStatus({ root }).runs[0].status, "awaiting-review");
@@ -185,5 +189,38 @@ test("doctor fails closed for a missing hard prerequisite", () => {
 	assert.deepEqual(
 		result.checks.find((check) => check.check === "command:graft"),
 		{ check: "command:graft", status: "fail" },
+	);
+});
+
+test("controller handoff fails closed when GitHub label lookup fails", () => {
+	const root = mkdtempSync(join(tmpdir(), "contractor-factory-gh-test-"));
+	const bin = join(root, "bin");
+	mkdirSync(bin, { recursive: true });
+	writeFileSync(
+		join(bin, "gh"),
+		`#!/bin/sh
+if [ "$1 $2" = "auth status" ]; then exit 0; fi
+if [ "$1 $2" = "issue view" ]; then exit 55; fi
+exit 0
+`,
+		{ encoding: "utf8", mode: 0o755 },
+	);
+	const script = fileURLToPath(
+		new URL("../scripts/bootstrap-github.sh", import.meta.url),
+	);
+	assert.throws(
+		() =>
+			execFileSync("bash", [script, "--handoff", "80"], {
+				env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+				stdio: "pipe",
+			}),
+		(error) => {
+			assert.equal(error.status, 1);
+			assert.match(
+				error.stderr.toString(),
+				/unable to read issue labels before handoff/,
+			);
+			return true;
+		},
 	);
 });

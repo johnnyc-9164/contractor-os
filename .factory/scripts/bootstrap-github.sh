@@ -35,12 +35,18 @@ labels=(
 )
 
 if [ "$ACTION" = "handoff" ]; then
-  if gh issue view "$ISSUE" --json labels --jq '.labels[].name' |
-    grep -Fxq 'symphony-ready'; then
+  current_labels="$(gh issue view "$ISSUE" --json labels --jq '.labels[].name')" || {
+    echo "error: unable to read issue labels before handoff" >&2
+    exit 1
+  }
+  if printf '%s\n' "$current_labels" | grep -Fxq 'symphony-ready'; then
     gh issue edit "$ISSUE" --remove-label 'symphony-ready' >/dev/null
   fi
-  if gh issue view "$ISSUE" --json labels --jq '.labels[].name' |
-    grep -Fxq 'symphony-ready'; then
+  verified_labels="$(gh issue view "$ISSUE" --json labels --jq '.labels[].name')" || {
+    echo "error: unable to verify issue labels after handoff" >&2
+    exit 1
+  }
+  if printf '%s\n' "$verified_labels" | grep -Fxq 'symphony-ready'; then
     echo "error: issue remains dispatchable after handoff" >&2
     exit 1
   fi
