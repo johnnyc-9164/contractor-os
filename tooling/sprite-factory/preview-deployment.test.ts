@@ -1,25 +1,33 @@
 import { describe, expect, it, vi } from "vitest";
-import { verifyPreviewDeployment } from "./preview-deployment";
+import {
+	assertMatchingSha,
+	verifyPreviewDeployment,
+} from "./preview-deployment";
+
+const EXPECTED_SHA = `9c06ea0${"a".repeat(33)}`;
 
 const input = {
 	target: "preview",
 	previewUrl: "https://contractoros-git-cos-65-johnnyc.vercel.app/",
-	expectedSha: "9c06ea0",
+	expectedSha: EXPECTED_SHA,
 };
 
-function health(sha: string, convex = "ok") {
-	return new Response(JSON.stringify({ sha, convex }), { status: 200 });
+function health(sha: string, convex = "ok", environment = "preview") {
+	return new Response(JSON.stringify({ sha, convex, environment }), {
+		status: 200,
+	});
 }
 
 describe("verifyPreviewDeployment", () => {
 	it("passes only when the Preview SHA matches and Convex is healthy", async () => {
-		const fetcher = vi.fn(async () => health("9c06ea0"));
+		const fetcher = vi.fn(async () => health(EXPECTED_SHA));
 
 		await expect(verifyPreviewDeployment(input, fetcher)).resolves.toEqual({
 			target: "preview",
 			previewUrl: "https://contractoros-git-cos-65-johnnyc.vercel.app",
-			expectedSha: "9c06ea0",
-			observedSha: "9c06ea0",
+			expectedSha: EXPECTED_SHA,
+			observedSha: EXPECTED_SHA,
+			environment: "preview",
 			convex: "ok",
 		});
 		expect(fetcher).toHaveBeenCalledWith(
@@ -29,17 +37,33 @@ describe("verifyPreviewDeployment", () => {
 	});
 
 	it("fails the required stale-SHA fixture with expected and observed output", async () => {
-		await expect(
-			verifyPreviewDeployment(input, async () => health("abf80e1")),
-		).rejects.toThrow(
+		expect(() => assertMatchingSha("9c06ea0", "abf80e1")).toThrow(
 			"Preview SHA mismatch: expected 9c06ea0, observed abf80e1",
 		);
 	});
 
 	it("fails when the matching Preview reports unhealthy Convex", async () => {
 		await expect(
-			verifyPreviewDeployment(input, async () => health("9c06ea0", "error")),
-		).rejects.toThrow("Preview 9c06ea0 is live, but Convex health is error");
+			verifyPreviewDeployment(input, async () => health(EXPECTED_SHA, "error")),
+		).rejects.toThrow(
+			`Preview ${EXPECTED_SHA} is live, but Convex health is error`,
+		);
+	});
+
+	it("requires a full commit SHA at the verification boundary", async () => {
+		await expect(
+			verifyPreviewDeployment({ ...input, expectedSha: "9c06ea0" }),
+		).rejects.toThrow("Expected SHA must be the full 40-character commit SHA");
+	});
+
+	it("rejects server-reported production even when the URL looks like a Preview", async () => {
+		await expect(
+			verifyPreviewDeployment(input, async () =>
+				health(EXPECTED_SHA, "ok", "production"),
+			),
+		).rejects.toThrow(
+			"Deployment environment must be preview; observed production",
+		);
 	});
 
 	it("requires the Preview target before making a request", async () => {
