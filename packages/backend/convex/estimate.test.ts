@@ -241,14 +241,35 @@ describe("estimate catalog family", () => {
 		});
 		expect(blocked.error?.code).toBe("GUARD_BLOCKED");
 		expect(JSON.stringify(blocked.error?.detail)).toContain("missing owners");
-		await t.run(async (ctx) => {
-			const assumption = (await ctx.db.query("assumptions").collect())[0];
-			if (!assumption) throw new Error("missing assumption");
-			await ctx.db.patch(assumption._id, {
-				owner_user_id: "usr_johnny",
-				status: "owned",
-			});
+		const assumptionKey = stored.assumptions[0]?.key;
+		if (!assumptionKey) throw new Error("missing assumption");
+		const claimed = await dispatch(actors.johnny, "assumption.claim", {
+			assumption_id: assumptionKey,
+			owner_user_id: "usr_johnny",
 		});
+		expect(claimed).toMatchObject({ ok: true, status: "owned" });
+		const claimedRow = await t.run((ctx) =>
+			ctx.db
+				.query("assumptions")
+				.withIndex("by_key", (q) => q.eq("key", assumptionKey))
+				.unique(),
+		);
+		expect(claimedRow).toMatchObject({
+			owner_user_id: "usr_johnny",
+			status: "owned",
+		});
+		expect(
+			(await t.run((ctx) => ctx.db.query("event_log").collect())).some(
+				(event) =>
+					event.action === "assumption.claimed" &&
+					event.entity_id === assumptionKey,
+			),
+		).toBe(true);
+		const doubleClaim = await dispatch(actors.johnny, "assumption.claim", {
+			assumption_id: assumptionKey,
+			owner_user_id: "usr_johnny",
+		});
+		expect(doubleClaim.error?.code).toBe("GUARD_BLOCKED");
 		expect(
 			await dispatch(actors.johnny, "estimate.submitForReview", {
 				estimate_id: estimateId,

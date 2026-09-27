@@ -125,6 +125,12 @@ const estimateKeySchema = z.object({ estimate_id: z.string().min(1) }).strict();
 const estimateReasonSchema = estimateKeySchema.extend({
 	reason: z.string().min(1),
 });
+const assumptionClaimSchema = z
+	.object({
+		assumption_id: z.string().min(1),
+		owner_user_id: z.string().min(1),
+	})
+	.strict();
 const technicalSchema = z
 	.object({
 		estimate_id: z.string().min(1),
@@ -228,6 +234,15 @@ export const OPERATIONS: Record<string, Operation> = {
 		emits: "estimate.abandoned",
 		schema: estimateReasonSchema,
 		run: estimate.abandon as Operation["run"],
+	},
+	"assumption.claim": {
+		name: "assumption.claim",
+		authority: ["Johnny", "Agent"],
+		writes: ["assumptions: owner_user_id set, status=owned"],
+		guards: ["assumption.status=open"],
+		emits: "assumption.claimed",
+		schema: assumptionClaimSchema,
+		run: estimate.claimAssumption as Operation["run"],
 	},
 	"lead.capture": {
 		name: "lead.capture",

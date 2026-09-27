@@ -32,15 +32,43 @@ function provenance(actor: ResolvedUser, now: string) {
 	};
 }
 
-async function byKey<Table extends "leads" | "estimates" | "rate_sets">(
+async function byKey(
 	ctx: MutationCtx,
-	table: Table,
+	table: "leads",
 	businessKey: string,
-) {
-	return ctx.db
-		.query(table)
-		.withIndex("by_key", (query) => query.eq("key", businessKey))
-		.unique();
+): Promise<Doc<"leads"> | null>;
+async function byKey(
+	ctx: MutationCtx,
+	table: "estimates",
+	businessKey: string,
+): Promise<Doc<"estimates"> | null>;
+async function byKey(
+	ctx: MutationCtx,
+	table: "rate_sets",
+	businessKey: string,
+): Promise<Doc<"rate_sets"> | null>;
+async function byKey(
+	ctx: MutationCtx,
+	table: "leads" | "estimates" | "rate_sets",
+	businessKey: string,
+): Promise<Doc<"leads"> | Doc<"estimates"> | Doc<"rate_sets"> | null> {
+	switch (table) {
+		case "leads":
+			return ctx.db
+				.query("leads")
+				.withIndex("by_key", (query) => query.eq("key", businessKey))
+				.unique();
+		case "estimates":
+			return ctx.db
+				.query("estimates")
+				.withIndex("by_key", (query) => query.eq("key", businessKey))
+				.unique();
+		case "rate_sets":
+			return ctx.db
+				.query("rate_sets")
+				.withIndex("by_key", (query) => query.eq("key", businessKey))
+				.unique();
+	}
 }
 
 export type EstimateLinePayload = {
@@ -364,5 +392,44 @@ export async function abandon(
 		from_state: "draft",
 		to_state: "abandoned",
 		reason: payload.reason,
+	};
+}
+
+export type ClaimAssumptionPayload = {
+	assumption_id: string;
+	owner_user_id: string;
+};
+
+export async function claimAssumption(
+	ctx: MutationCtx,
+	payload: ClaimAssumptionPayload,
+	actor: ResolvedUser,
+): Promise<ServiceResult> {
+	const assumption = await ctx.db
+		.query("assumptions")
+		.withIndex("by_key", (query) => query.eq("key", payload.assumption_id))
+		.unique();
+	if (!assumption)
+		throw new EstimateServiceError("NOT_FOUND", "Assumption not found");
+	if (assumption.status !== "open") {
+		throw new EstimateServiceError(
+			"GUARD_BLOCKED",
+			"GUARD_BLOCKED assumption must be open to claim",
+		);
+	}
+	const now = new Date().toISOString();
+	await ctx.db.patch(assumption._id, {
+		owner_user_id: payload.owner_user_id,
+		status: "owned",
+		updated_by: actor.user_key,
+		updated_at: now,
+	});
+	return {
+		record_id: assumption.key,
+		status: "owned",
+		from_state: "open",
+		to_state: "owned",
+		entity_refs: [assumption.owner_entity],
+		facts: { owner_user_id: payload.owner_user_id },
 	};
 }
