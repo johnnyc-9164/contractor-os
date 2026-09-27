@@ -1,7 +1,7 @@
 "use client";
 
 import { api } from "@contractor-os/backend/convex/_generated/api";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect } from "react";
 
@@ -20,20 +20,29 @@ export function MembershipProvider({
 }: {
 	children: React.ReactNode;
 }) {
-	const membership = useQuery(api.memberships.get);
+	const { isLoading: isAuthLoading, isAuthenticated } = useConvexAuth();
+	const membership = useQuery(
+		api.memberships.get,
+		!isAuthLoading && isAuthenticated ? {} : "skip",
+	);
 	const router = useRouter();
 	const pathname = usePathname();
 	const value = {
 		role: membership?.role ?? null,
-		enabled: membership?.enabled ?? false,
-		isLoading: membership === undefined,
+		enabled: isAuthenticated && (membership?.enabled ?? false),
+		isLoading: isAuthLoading || (isAuthenticated && membership === undefined),
 	};
 
 	useEffect(() => {
-		if (!value.isLoading && !value.enabled && pathname !== "/no-access") {
+		if (
+			isAuthenticated &&
+			!value.isLoading &&
+			!value.enabled &&
+			pathname !== "/no-access"
+		) {
 			router.replace("/no-access");
 		}
-	}, [pathname, router, value.enabled, value.isLoading]);
+	}, [isAuthenticated, pathname, router, value.enabled, value.isLoading]);
 
 	if (value.isLoading || !value.enabled) return null;
 

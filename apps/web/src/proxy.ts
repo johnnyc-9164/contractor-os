@@ -9,7 +9,11 @@ export function isProtectedRoute(pathname: string): boolean {
 		pathname === "/dashboard" ||
 		pathname.startsWith("/dashboard/") ||
 		pathname === "/leads" ||
-		pathname.startsWith("/leads/")
+		pathname.startsWith("/leads/") ||
+		pathname === "/pipeline" ||
+		pathname.startsWith("/pipeline/") ||
+		pathname === "/quotes" ||
+		pathname.startsWith("/quotes/")
 	);
 }
 
