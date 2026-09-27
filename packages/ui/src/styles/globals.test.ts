@@ -59,6 +59,8 @@ const contrastPairs = [
 	["secondary-foreground", "secondary"],
 	["muted-foreground", "muted"],
 	["accent-foreground", "accent"],
+	["destructive", "background"],
+	["destructive", "card"],
 	["sidebar-primary-foreground", "sidebar-primary"],
 	["sidebar-accent-foreground", "sidebar-accent"],
 ] as const;
@@ -96,11 +98,6 @@ describe("PaintPro semantic theme", () => {
 					`${selector} ${foreground} on ${background}`,
 				).toBeGreaterThanOrEqual(4.5);
 			}
-
-			expect(
-				contrastRatio("#ffffff", theme.get("destructive") ?? ""),
-				`${selector} white on destructive`,
-			).toBeGreaterThanOrEqual(4.5);
 		}
 	});
 
