@@ -3,7 +3,7 @@ import { verifyPreviewDeployment } from "./preview-deployment";
 
 const input = {
 	target: "preview",
-	previewUrl: "https://contractoros-git-cos-65.example.vercel.app/",
+	previewUrl: "https://contractoros-git-cos-65-johnnyc.vercel.app/",
 	expectedSha: "9c06ea0",
 };
 
@@ -17,14 +17,14 @@ describe("verifyPreviewDeployment", () => {
 
 		await expect(verifyPreviewDeployment(input, fetcher)).resolves.toEqual({
 			target: "preview",
-			previewUrl: "https://contractoros-git-cos-65.example.vercel.app",
+			previewUrl: "https://contractoros-git-cos-65-johnnyc.vercel.app",
 			expectedSha: "9c06ea0",
 			observedSha: "9c06ea0",
 			convex: "ok",
 		});
 		expect(fetcher).toHaveBeenCalledWith(
 			new URL(
-				"https://contractoros-git-cos-65.example.vercel.app/api/health",
+				"https://contractoros-git-cos-65-johnnyc.vercel.app/api/health",
 			),
 			expect.objectContaining({ redirect: "error" }),
 		);
@@ -64,6 +64,24 @@ describe("verifyPreviewDeployment", () => {
 		).rejects.toThrow(
 			"Production URL is not allowed: https://contractoros-ten.vercel.app",
 		);
+	});
+
+	it("refuses a non-Contractor OS host before sending a bypass token", async () => {
+		const fetcher = vi.fn();
+
+		await expect(
+			verifyPreviewDeployment(
+				{
+					...input,
+					previewUrl: "https://attacker.example",
+					bypassToken: "secret",
+				},
+				fetcher,
+			),
+		).rejects.toThrow(
+			"Preview URL must use a Contractor OS Vercel Preview host; received attacker.example",
+		);
+		expect(fetcher).not.toHaveBeenCalled();
 	});
 
 	it("requires both the expected SHA and Preview URL", async () => {
