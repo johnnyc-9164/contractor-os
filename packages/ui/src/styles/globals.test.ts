@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -27,11 +29,14 @@ function relativeLuminance(hex: string) {
 		throw new Error(`Expected a six-digit hex color, received ${hex}`);
 	}
 
-	const linear = channels.map((channel) =>
+	const [red, green, blue] = channels.map((channel) =>
 		channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
 	);
+	if (red === undefined || green === undefined || blue === undefined) {
+		throw new Error(`Could not calculate luminance for ${hex}`);
+	}
 
-	return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+	return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
 function contrastRatio(first: string, second: string) {
