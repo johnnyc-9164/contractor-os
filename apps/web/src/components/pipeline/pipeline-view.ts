@@ -35,3 +35,18 @@ export function countLeads(columns: LeadColumns): number {
 		0,
 	);
 }
+
+export function findLeadById(
+	columns: LeadColumns,
+	terminalLeads: PipelineLead[],
+	leadId: string | null,
+): PipelineLead | null {
+	if (!leadId) return null;
+
+	for (const leads of Object.values(columns)) {
+		const lead = leads.find((candidate) => candidate.id === leadId);
+		if (lead) return lead;
+	}
+
+	return terminalLeads.find((lead) => lead.id === leadId) ?? null;
+}
