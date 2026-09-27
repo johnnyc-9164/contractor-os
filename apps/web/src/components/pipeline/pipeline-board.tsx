@@ -403,8 +403,8 @@ export function PipelineBoard() {
 				<SlidersHorizontalIcon aria-hidden="true" />
 				<p>
 					Open a card for its live record and keyboard-accessible stage actions.
-					Drag cards when search is clear. Server guards remain authoritative
-					and rejected moves roll back.
+					Drag cards when search is clear. If a move cannot be completed, the
+					card returns to its previous stage with the reason.
 					{!isPrincipal ? " Awarding requires principal authority." : ""}
 				</p>
 			</div>
@@ -417,8 +417,7 @@ export function PipelineBoard() {
 						</EmptyMedia>
 						<EmptyTitle>No active leads</EmptyTitle>
 						<EmptyDescription>
-							New tenant-scoped lead records will appear here as they enter the
-							pipeline.
+							New lead records will appear here as they enter the pipeline.
 						</EmptyDescription>
 					</EmptyHeader>
 				</Empty>

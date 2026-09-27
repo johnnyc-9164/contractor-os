@@ -93,18 +93,16 @@ export function LeadDetailsSheet({
 								<CardHeader>
 									<CardTitle className="flex items-center gap-2">
 										<DatabaseIcon aria-hidden="true" />
-										Available context
+										Lead context
 									</CardTitle>
 									<CardDescription>
-										This panel only shows fields returned by the live
-										tenant-scoped lead query.
+										Only information saved on this lead appears here.
 									</CardDescription>
 								</CardHeader>
 								<CardContent>
 									<p className="text-muted-foreground text-xs/relaxed">
 										Contact details, source, conversation history, and quote
-										context will appear here after those backend fields are
-										exposed. No sample customer data is shown.
+										context are not available on this record yet.
 									</p>
 								</CardContent>
 							</Card>
