@@ -22,8 +22,7 @@ type HealthPayload = {
 };
 
 const PRODUCTION_ORIGINS = new Set(["https://contractoros-ten.vercel.app"]);
-const PREVIEW_HOST_PATTERN =
-	/^contractoros-[a-z0-9-]+-johnnyc\.vercel\.app$/u;
+const PREVIEW_HOST_PATTERN = /^contractoros-[a-z0-9-]+-johnnyc\.vercel\.app$/u;
 
 function required(value: string | undefined, name: string): string {
 	const normalized = value?.trim();
@@ -84,7 +83,9 @@ export async function verifyPreviewDeployment(
 		signal: AbortSignal.timeout(30_000),
 	});
 	if (!response.ok) {
-		throw new Error(`Preview health request failed with HTTP ${response.status}`);
+		throw new Error(
+			`Preview health request failed with HTTP ${response.status}`,
+		);
 	}
 
 	let payload: HealthPayload;
