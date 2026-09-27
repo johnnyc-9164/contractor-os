@@ -345,3 +345,44 @@ export const verifyChain = query({
 		return { ok: true as const, checked: rows.length };
 	},
 });
+
+/**
+ * TC-APP-02: read-only per-lead event timeline for the lead drawer.
+ * Returns the lead's event_log entries newest-first. Additive, read-only,
+ * no schema change — uses the existing by_entity index.
+ */
+export const timelineForLead = query({
+	args: { lead_key: v.string() },
+	handler: async (ctx, args) => {
+		// TC-LEAD-02: callers pass the component co_lead identifier (list rows come
+		// from api.backend.listLeads), but events are logged against the local
+		// lead_<ulid> key. Resolve through the bridge before querying.
+		let entityId = args.lead_key;
+		const local =
+			(await ctx.db
+				.query("leads")
+				.withIndex("by_key", (q) => q.eq("key", args.lead_key))
+				.unique()) ??
+			(await ctx.db
+				.query("leads")
+				.withIndex("by_co_lead_id", (q) => q.eq("co_lead_id", args.lead_key))
+				.unique());
+		if (local) entityId = local.key;
+		const rows = await ctx.db
+			.query("event_log")
+			.withIndex("by_entity", (q) =>
+				q.eq("entity_type", "lead").eq("entity_id", entityId),
+			)
+			.order("desc")
+			.collect();
+		return rows.map((row) => ({
+			key: row.key,
+			at: row.at,
+			action: row.action,
+			actor_display: row.actor_display,
+			from_state: row.from_state ?? null,
+			to_state: row.to_state ?? null,
+			reason: row.reason ?? null,
+		}));
+	},
+});

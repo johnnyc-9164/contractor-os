@@ -1,7 +1,8 @@
 // TC-BUILD-2 acceptance: events.append / events.verifyChain per Build Pack §23.
+import contractorOsTest from "@johnnyc2026/contractor-os-core/test";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import { api } from "./_generated/api.js";
+import { api, components } from "./_generated/api.js";
 import { EVENT_CHAIN_GENESIS, sha256Hex, stableStringify } from "./events.js";
 import schema from "./schema.js";
 
@@ -365,5 +366,149 @@ describe("multi-user chain", () => {
 		const check = await t.query(api.events.verifyChain, {});
 		expect(check.ok).toBe(true);
 		expect(check.checked).toBe(2);
+	});
+});
+
+describe("timelineForLead (TC-LEAD-02)", () => {
+	const JOHNNY_SUBJECT = "https://clerk.test.local|timeline_johnny";
+	const TENANT_ID = "timeline-test-tenant";
+
+	function setupBridge() {
+		const t = convexTest(schema, modules);
+		contractorOsTest.register(t);
+		return t;
+	}
+
+	async function seedBridgeIdentity(
+		t: ReturnType<typeof setupBridge>,
+		key: string,
+		role: "principal" | "agent_owner" | "crew",
+		subject: string,
+	) {
+		const now = new Date().toISOString();
+		await t.run(async (ctx) => {
+			await ctx.db.insert("users", {
+				key,
+				display_name: key,
+				role,
+				status: "active",
+				created_by: "system",
+				created_at: now,
+				updated_by: "system",
+				updated_at: now,
+				source: "test",
+				schema_version: 1,
+				company_id: "co_skys",
+			});
+			await ctx.db.insert("contractorOsMemberships", {
+				tokenIdentifier: subject,
+				tenantId: TENANT_ID,
+				enabled: true,
+				role: "admin",
+			});
+		});
+		await t.mutation(api.identity.bind, {
+			user_key: key,
+			provider: "clerk",
+			provider_subject: subject,
+		});
+		return t.withIdentity({ tokenIdentifier: subject });
+	}
+
+	function bridgeDispatchArgs(
+		contract: string,
+		payload: unknown,
+		suffix: string,
+	) {
+		return {
+			contract,
+			schema_version: 1,
+			idempotency_key: `01KLEAD${suffix.padEnd(19, "0").slice(0, 19)}`,
+			payload,
+		};
+	}
+
+	async function seedLeadWithEvents(t: ReturnType<typeof setupBridge>) {
+		const authed = await seedBridgeIdentity(
+			t,
+			"usr_johnny",
+			"principal",
+			JOHNNY_SUBJECT,
+		);
+		await t.mutation(components.contractorOs.records.co_client.create, {
+			tenantId: TENANT_ID,
+			actorId: "seed",
+			requestKey: "timeline-client",
+			identifier: "client-timeline",
+			title: "Timeline Client",
+			properties: { status: "prospect" },
+		});
+		let request = 0;
+		const dispatch = (contract: string, payload: unknown) =>
+			authed.mutation(
+				api.catalog.dispatch,
+				bridgeDispatchArgs(
+					contract,
+					payload,
+					`timeline-${String(++request).padStart(2, "0")}`,
+				),
+			);
+		const captured = await dispatch("lead.capture", {
+			title: "Timeline lead",
+			source: "referral",
+		});
+		const localKey = captured.record_id as string;
+		await dispatch("lead.sendOutreach", { lead_id: localKey, channel: "call" });
+		await dispatch("lead.recordReply", {
+			lead_id: localKey,
+			reply_summary: "Interested",
+		});
+		const qualified = await dispatch("lead.qualify", {
+			lead_id: localKey,
+			client_name: "client-timeline",
+			qualification_notes: "Qualified",
+		});
+		expect(qualified.ok, JSON.stringify(qualified)).toBe(true);
+		// Envelope prepends record_id: entity_refs = [localKey, coLeadId]
+		const coLeadId = qualified.entity_refs[1] as string;
+		expect(coLeadId).toBeTruthy();
+		return { authed, localKey, coLeadId };
+	}
+
+	it("returns events for a component co_lead identifier", async () => {
+		const t = setupBridge();
+		const { coLeadId, localKey } = await seedLeadWithEvents(t);
+		const viaComponent = await t.query(api.events.timelineForLead, {
+			lead_key: coLeadId,
+		});
+		const viaLocal = await t.query(api.events.timelineForLead, {
+			lead_key: localKey,
+		});
+		expect(viaComponent.length).toBeGreaterThan(0);
+		expect(viaComponent.map((r) => r.key)).toEqual(viaLocal.map((r) => r.key));
+	});
+
+	it("returns events for a local lead_<ulid> key (existing behavior)", async () => {
+		const t = setupBridge();
+		const { localKey } = await seedLeadWithEvents(t);
+		const rows = await t.query(api.events.timelineForLead, {
+			lead_key: localKey,
+		});
+		expect(rows.length).toBeGreaterThan(0);
+		for (const row of rows) {
+			expect(row.key).toBeTruthy();
+			expect(row.at).toBeTruthy();
+			expect(row.action).toBeTruthy();
+		}
+	});
+
+	it("returns [] for an unknown identifier (no throw)", async () => {
+		const t = setupBridge();
+		await expect(
+			t.query(api.events.timelineForLead, { lead_key: "lead_nonexistent_000" }),
+		).resolves.toEqual([]);
+		await expect(
+			t.query(api.events.timelineForLead, { lead_key: "co_lead-nonexistent" }),
+		).resolves.toEqual([]);
 	});
 });

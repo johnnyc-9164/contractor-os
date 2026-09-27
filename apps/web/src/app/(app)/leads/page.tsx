@@ -9,8 +9,8 @@ import {
 	Unauthenticated,
 	useQuery,
 } from "convex/react";
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { LeadDrawer } from "../../../components/leads/lead-drawer";
 import { displayStage, nextStage, stageGroup } from "./lead-stages";
 
 type Lead = {
@@ -50,6 +50,8 @@ function relativeDate(timestamp: number): string {
 function LeadList() {
 	const [cursor, setCursor] = useState<string | null>(null);
 	const [loadedLeads, setLoadedLeads] = useState<Lead[]>([]);
+	const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+	const [drawerOpen, setDrawerOpen] = useState(false);
 	const result = useQuery(api.backend.listLeads, {
 		paginationOpts: { numItems: 20, cursor },
 	});
@@ -65,6 +67,13 @@ function LeadList() {
 			return [...byId.values()];
 		});
 	}, [result]);
+
+	// Derive the selected lead from the reactive query result so the drawer
+	// always shows fresh data — actions refresh it with no manual reload
+	// and no selection clearing.
+	const selectedLead = selectedLeadId
+		? (loadedLeads.find((lead) => lead.identifier === selectedLeadId) ?? null)
+		: null;
 
 	const actorsByLead = useMemo(() => {
 		const actors = new Map<string, HistoryEvent>();
@@ -82,6 +91,11 @@ function LeadList() {
 		for (const lead of loadedLeads) counts[stageGroup(lead.state)] += 1;
 		return counts;
 	}, [loadedLeads]);
+
+	const openDrawerFor = (lead: Lead) => {
+		setSelectedLeadId(lead.identifier);
+		setDrawerOpen(true);
+	};
 
 	if (result === undefined && loadedLeads.length === 0) {
 		return (
@@ -130,16 +144,21 @@ function LeadList() {
 								const next = nextStage(lead.state);
 								return (
 									<tr
-										className="border-border border-b transition-colors hover:bg-muted/50"
+										className="cursor-pointer border-border border-b transition-colors hover:bg-muted/50"
 										key={lead.id}
+										onClick={() => openDrawerFor(lead)}
 									>
 										<td className="px-6 py-4">
-											<Link
-												className="font-medium underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-2"
-												href={`/leads/${encodeURIComponent(lead.identifier)}?state=${encodeURIComponent(lead.state)}`}
+											<button
+												className="cursor-pointer text-left font-medium underline-offset-4 hover:underline"
+												onClick={(event) => {
+													event.stopPropagation();
+													openDrawerFor(lead);
+												}}
+												type="button"
 											>
 												{lead.title || lead.identifier}
-											</Link>
+											</button>
 											<div className="mt-1 font-mono text-muted-foreground text-xs">
 												{lead.identifier}
 											</div>
@@ -180,6 +199,12 @@ function LeadList() {
 					</Button>
 				</div>
 			) : null}
+
+			<LeadDrawer
+				lead={selectedLead}
+				onOpenChange={setDrawerOpen}
+				open={drawerOpen}
+			/>
 		</>
 	);
 }
