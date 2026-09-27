@@ -39,8 +39,12 @@ Contractor OS: an operating system for a contracting business — leads → jobs
 
 - Languages: TypeScript. Runtimes: Node 22 (CI), Bun not used.
 - Frameworks: Next.js 16 (App Router), React 19, Convex, Tailwind CSS v4.
-- Auth: Clerk (`src/proxy.ts` runs `clerkMiddleware`); Convex via the Clerk
-  **"convex" JWT template** (`convex/auth.config.ts`).
+- Auth: Clerk (`src/proxy.ts` runs `clerkMiddleware`). With the installed
+  Convex 1.46.0, Convex auth may use Clerk's activated Convex integration when
+  `sessionClaims.aud` is `convex`, or the legacy **"convex" JWT template**.
+  `convex/auth.config.ts` configures the Clerk issuer and the `convex`
+  application/audience; that source configuration does not prove which Clerk
+  integration or Convex instance is active at runtime.
 - Package manager: pnpm (workspace). Validation: Zod. Lint/format: Biome.
   Tests: Vitest. Git hooks: lefthook.
 
@@ -48,7 +52,7 @@ Contractor OS: an operating system for a contracting business — leads → jobs
 
 | Task | Command |
 | --- | --- |
-| Install | `pnpm install` (operator shell only — the Codex sandbox cannot; SQLite store EPERM) |
+| Install | `corepack pnpm install` (inside the assigned Sprite) |
 | Typecheck (web) | `pnpm --filter web exec tsc --noEmit` |
 | Lint | `pnpm --filter web exec biome check src` |
 | Tests (web) | `pnpm --filter web exec vitest run` |
@@ -70,9 +74,15 @@ observed SHA equals `GITHUB_SHA` and Convex reports healthy).
 - `apps/web/src/components/` — `CreateLeadForm` → `co_create_lead`,
   `CreateJobForm` → `co_create_job`, `CreateInvoiceForm` → `co_create_invoice`
 - `packages/backend/convex/schema.ts` — domain schema (backend crew file claim)
-- `packages/backend/convex/cms.ts` — CMS mount; **known tenant-isolation hole**
-  (any authenticated user can touch any site) — tracked, do not paper over in
-  the frontend
+- `packages/backend/convex/cms.ts` — authenticated CMS facade. `requireTenant`
+  resolves an enabled membership from the caller's token identity, and
+  `requireSiteTenant` checks the site's tenant mapping before reads/updates.
+  `cms.isolation.test.ts` exercises same-tenant access, cross-tenant rejection
+  and list filtering, and unauthenticated rejection in `convex-test`; this is
+  mocked/unit evidence, not proof of production configuration or behavior.
+  The facade is not fully resolved: `createSite` invokes component creation
+  before validating an existing ownership mapping (GH-59), and `listSites`
+  filters a component-wide result after pagination (GH-64).
 - Production: `https://contractoros-ten.vercel.app`, Convex `posh-cobra-868`
 
 ## Conventions (facts, not philosophy)
@@ -81,10 +91,27 @@ observed SHA equals `GITHUB_SHA` and Convex reports healthy).
   union. Conditional spreads widen it to `string` silently — build link arrays
   imperatively or annotate. Only the production build catches this.
 - No emoji in UI, code, or markup (see `DESIGN.md` for the voice rules).
-- `pnpm install` and all git writes happen in an operator shell, never in a
-  Codex sandbox (read-only git metadata, no pnpm).
-- One git worktree per worker; no two active branches modify the same file
-  (claims registered in the command log).
+- The Symphony controller is lightweight and runs on the operator's Windows
+  PC. All project reads, edits, dependency operations, builds, tests, and
+  development servers run inside the worker's assigned Sprite workspace.
+- GitHub Issues are the active execution queue. Legacy Beads IDs and snapshots
+  are migration provenance only; an open issue is not admission. Both
+  admission labels mean the controller checked the live contract,
+  dependencies, branch/base SHA, workspace, claims, tools, acceptance, and
+  verification commands.
+- One isolated worktree/workspace per worker; no two active branches modify
+  the same file. Exclusive file claims are checked before dispatch.
+- Workers implement and verify, then hand off uncommitted changes. The
+  controller owns commits, pushes, draft PRs, and independent full-diff
+  review. Merge and deploy remain approval-gated; do not access production or
+  run production changes unless the current contract explicitly authorizes it.
+- Completion evidence records exact base/head SHAs, commands and exit codes,
+  changed paths, and limitations. Deterministic CI, the authoritative
+  production build, Vercel preview, and applicable authenticated-flow checks
+  run against the exact reviewed SHA before an approved merge/deploy.
+- classifier.dev may receive metadata-only cost-triage inputs. Never send it
+  private source, paths, diffs, credentials, or other repository content; paid
+  Jev calls are not part of the current workflow.
 
 ## Orientation
 
