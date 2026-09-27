@@ -23,9 +23,7 @@ describe("verifyPreviewDeployment", () => {
 			convex: "ok",
 		});
 		expect(fetcher).toHaveBeenCalledWith(
-			new URL(
-				"https://contractoros-git-cos-65-johnnyc.vercel.app/api/health",
-			),
+			new URL("https://contractoros-git-cos-65-johnnyc.vercel.app/api/health"),
 			expect.objectContaining({ redirect: "error" }),
 		);
 	});
@@ -41,9 +39,7 @@ describe("verifyPreviewDeployment", () => {
 	it("fails when the matching Preview reports unhealthy Convex", async () => {
 		await expect(
 			verifyPreviewDeployment(input, async () => health("9c06ea0", "error")),
-		).rejects.toThrow(
-			"Preview 9c06ea0 is live, but Convex health is error",
-		);
+		).rejects.toThrow("Preview 9c06ea0 is live, but Convex health is error");
 	});
 
 	it("requires the Preview target before making a request", async () => {
@@ -51,7 +47,9 @@ describe("verifyPreviewDeployment", () => {
 
 		await expect(
 			verifyPreviewDeployment({ ...input, target: "production" }, fetcher),
-		).rejects.toThrow('Deployment target must be preview; received "production"');
+		).rejects.toThrow(
+			'Deployment target must be preview; received "production"',
+		);
 		expect(fetcher).not.toHaveBeenCalled();
 	});
 
