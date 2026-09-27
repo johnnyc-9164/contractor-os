@@ -11,10 +11,21 @@ holds the local schema, auth config, and facade modules.
   file claim — check the command log before touching)
 - `convex/backend.ts` — facade re-exporting the component's API
 - `convex/healthCheck.ts` — liveness query polled by `/api/health`
-- `convex/auth.config.ts` — Clerk JWT template wiring ("convex" template)
-- `convex/cms.ts` — CMS component mount. **Known tenant-isolation hole:**
-  any authenticated user can touch any site. Tracked for a backend contract;
-  do not paper over it in the frontend.
+- `convex/auth.config.ts` — Clerk issuer plus `convex` application/audience
+  validation. Convex 1.46.0 supports Clerk's activated Convex integration when
+  `sessionClaims.aud` is `convex`, as well as the legacy "convex" JWT template;
+  the checked-in config alone does not prove which integration or deployment
+  instance is active at runtime.
+- `convex/cms.ts` — authenticated CMS facade. `requireTenant` requires an
+  enabled membership for the caller's token identity; `requireSiteTenant`
+  rejects missing mappings and mappings owned by another tenant before
+  reads/updates. `convex/cms.isolation.test.ts` covers same-tenant create/read/
+  list/update, cross-tenant read/write rejection and list filtering, an
+  idempotent cross-tenant create replay, and unauthenticated calls. These are
+  `convex-test` unit tests with mocked identities, not production runtime
+  security proof. Two limitations remain: `createSite` calls component
+  creation before validating an existing ownership mapping (GH-59), and
+  `listSites` filters the component-wide page after pagination (GH-64).
 
 ## Rules
 
@@ -25,3 +36,8 @@ holds the local schema, auth config, and facade modules.
   facade owns wiring.
 - No deploys from here: Convex production deploys run in CI (`cd.yml`).
   Never run `convex deploy` from a workstation against production.
+- Backend work follows the root Sprite workflow: all project operations stay
+  in the assigned isolated Sprite/workspace and exclusive file claim. Workers
+  provide exact-SHA verification evidence and uncommitted changes for
+  independent review; controller-owned commit/PR/CI and explicit approval are
+  required before merge or deploy.
