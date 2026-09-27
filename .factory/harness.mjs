@@ -71,9 +71,7 @@ function workingTreeFiles(root) {
 	];
 	return [
 		...new Set(
-			outputs
-				.flatMap((value) => (value ?? "").split("\n"))
-				.filter((path) => path && !path.startsWith(".factory/runtime/")),
+			outputs.flatMap((value) => (value ?? "").split("\n")).filter(Boolean),
 		),
 	].sort();
 }
@@ -351,6 +349,12 @@ export function finishRun({
 export function finalizeRun({ root = resolveRoot(), runId, candidateSha }) {
 	const completed = readState(root, runId);
 	if (completed.status === "running") fail(`run is not terminal: ${runId}`);
+	if (
+		["awaiting-review", "succeeded"].includes(completed.status) &&
+		completed.gates.at(-1)?.status !== "GREEN"
+	) {
+		fail("a review candidate requires a recorded GREEN gate");
+	}
 	const currentHead = git(root, ["rev-parse", "HEAD"]);
 	if (!candidateSha || candidateSha !== currentHead) {
 		fail("candidate SHA must equal the current committed HEAD");

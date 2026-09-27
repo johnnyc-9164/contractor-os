@@ -97,10 +97,7 @@ admission by changing GitHub.
 ## Start sequence
 
 1. Read the issue and controller workpad without modifying either.
-2. Record the current host, absolute workspace, branch, base SHA, dirty state,
-   acceptance criteria, allowed files, exclusions, verification commands, and
-   required gate level.
-3. Start a run:
+2. Start a run before recording any preflight evidence:
 
    ```bash
    node .factory/harness.mjs start \
@@ -108,6 +105,10 @@ admission by changing GitHub.
      --title "{{ issue.title }}"
    ```
 
+3. Through `harness.mjs event`, record the current host, absolute workspace,
+   branch, base SHA, dirty state, acceptance criteria, allowed files,
+   exclusions, verification commands, and required gate level in that run's
+   ledger.
 4. Before direct source reads, run a task-specific Graft query through the
    ledger:
 

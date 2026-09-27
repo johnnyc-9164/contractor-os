@@ -48,6 +48,11 @@ function repository() {
 	]) {
 		writeFileSync(join(root, path), `${path}\n`, "utf8");
 	}
+	writeFileSync(
+		join(root, ".factory/runtime/.gitignore"),
+		"*\n!.gitignore\n",
+		"utf8",
+	);
 	writeFileSync(join(root, "tracked.txt"), "baseline\n", "utf8");
 	execFileSync("git", ["add", "."], { cwd: root });
 	execFileSync("git", ["commit", "-qm", "baseline"], { cwd: root });
@@ -163,6 +168,41 @@ test("controller finalization rejects protected branch candidates", () => {
 	assert.throws(
 		() => finalizeRun({ root, runId: "run-COS-79", candidateSha }),
 		/candidate branch is protected: master/,
+	);
+});
+
+test("controller finalization rejects review candidates without a green gate", () => {
+	const root = repository();
+	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
+	const state = startRun({ root, task: "COS-80", runId: "run-COS-80" });
+	finishRun({ root, runId: state.run_id, status: "awaiting-review" });
+	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	}).trim();
+	assert.throws(
+		() => finalizeRun({ root, runId: state.run_id, candidateSha }),
+		/a review candidate requires a recorded GREEN gate/,
+	);
+});
+
+test("controller finalization includes tracked runtime metadata in dirty checks", () => {
+	const root = repository();
+	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
+	const state = startRun({ root, task: "COS-81", runId: "run-COS-81" });
+	finishRun({ root, runId: state.run_id, status: "blocked" });
+	writeFileSync(
+		join(root, ".factory/runtime/.gitignore"),
+		"*\n!.gitignore\n# tracked change\n",
+		"utf8",
+	);
+	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	}).trim();
+	assert.throws(
+		() => finalizeRun({ root, runId: state.run_id, candidateSha }),
+		/candidate working tree is not clean: \.factory\/runtime\/\.gitignore/,
 	);
 });
 

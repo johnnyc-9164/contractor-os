@@ -50,7 +50,9 @@ Finishing seals the runtime state but does not write
 `docs/factory/runs/<run-id>.json`. After committing the source candidate, the
 controller finalizes the record against that exact clean `HEAD`, commits the
 record separately, and reruns review/checks on the final PR head. Run records are
-immutable; corrections create a new record.
+immutable; corrections create a new record. An `awaiting-review` or `succeeded`
+run can be finalized only when its latest recorded gate is `GREEN`; blocked and
+failed runs remain recordable without manufacturing a green result.
 
 ```bash
 node .factory/harness.mjs start --task GH-123 --title "..."
