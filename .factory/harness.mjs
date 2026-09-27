@@ -5,9 +5,11 @@ import { randomUUID } from "node:crypto";
 import {
 	appendFileSync,
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	realpathSync,
 	renameSync,
 	writeFileSync,
 } from "node:fs";
@@ -87,21 +89,31 @@ function git(root, args) {
 
 function workingTreeFiles(root) {
 	const outputs = [
-		git(root, ["diff", "--no-ext-diff", "--no-textconv", "--name-only"]),
-		git(root, [
-			"diff",
-			"--no-ext-diff",
-			"--no-textconv",
-			"--cached",
-			"--name-only",
-		]),
-		git(root, ["ls-files", "--others", "--exclude-standard"]),
+		gitRequired(
+			root,
+			["diff", "--no-ext-diff", "--no-textconv", "--name-only"],
+			"unable to inspect unstaged candidate changes",
+		),
+		gitRequired(
+			root,
+			["diff", "--no-ext-diff", "--no-textconv", "--cached", "--name-only"],
+			"unable to inspect staged candidate changes",
+		),
+		gitRequired(
+			root,
+			["ls-files", "--others", "--exclude-standard"],
+			"unable to inspect untracked candidate files",
+		),
 	];
 	return [
-		...new Set(
-			outputs.flatMap((value) => (value ?? "").split("\n")).filter(Boolean),
-		),
+		...new Set(outputs.flatMap((value) => value.split("\n")).filter(Boolean)),
 	].sort();
+}
+
+function gitRequired(root, args, purpose) {
+	const output = git(root, args);
+	if (output === null) fail(`${purpose}: Git command failed`);
+	return output;
 }
 
 function changedFiles(root) {
@@ -122,6 +134,60 @@ function changedFiles(root) {
 				.filter(Boolean)
 		: [];
 	return [...new Set([...workingTreeFiles(root), ...committed])].sort();
+}
+
+function candidateChangedFiles(root, baseSha, candidateSha) {
+	for (const [label, value] of [
+		["approved base SHA", baseSha],
+		["candidate SHA", candidateSha],
+	]) {
+		if (typeof value !== "string" || !/^[0-9a-f]{40,64}$/.test(value)) {
+			fail(`${label} must be a full hexadecimal commit SHA`);
+		}
+	}
+	gitRequired(
+		root,
+		["cat-file", "-e", `${baseSha}^{commit}`],
+		"approved base commit is unavailable",
+	);
+	gitRequired(
+		root,
+		["merge-base", "--is-ancestor", baseSha, candidateSha],
+		"candidate is not descended from the approved base",
+	);
+	return gitRequired(
+		root,
+		[
+			"diff",
+			"--no-ext-diff",
+			"--no-textconv",
+			"--name-only",
+			`${baseSha}...${candidateSha}`,
+			"--",
+		],
+		"unable to compute candidate changed files",
+	)
+		.split("\n")
+		.filter(Boolean)
+		.sort();
+}
+
+function durableDirectory(root) {
+	const trustedRoot = realpathSync(root);
+	let current = root;
+	for (const segment of ["docs", "factory", "runs"]) {
+		current = join(current, segment);
+		if (!existsSync(current)) mkdirSync(current);
+		const metadata = lstatSync(current);
+		if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+			fail(`durable record path is not a real directory: ${current}`);
+		}
+	}
+	const actual = realpathSync(current);
+	if (actual !== join(trustedRoot, "docs", "factory", "runs")) {
+		fail("durable record path escapes the candidate root");
+	}
+	return current;
 }
 
 export function resolveRoot(explicitRoot = process.env.FACTORY_ROOT) {
@@ -218,6 +284,8 @@ export function startRun({ root = resolveRoot(), task, title = "", runId }) {
 	const directory = runDirectory(root, id);
 	if (existsSync(directory)) fail(`run already exists: ${id}`);
 	mkdirSync(directory, { recursive: true });
+	const initialBranch = git(root, ["branch", "--show-current"]) ?? "unknown";
+	const initialHead = git(root, ["rev-parse", "HEAD"]) ?? "unknown";
 	const state = {
 		schema_version: SCHEMA_VERSION,
 		run_id: id,
@@ -227,8 +295,9 @@ export function startRun({ root = resolveRoot(), task, title = "", runId }) {
 		phase: "started",
 		started_at: now(),
 		updated_at: now(),
-		branch: git(root, ["branch", "--show-current"]) ?? "unknown",
-		head_sha: git(root, ["rev-parse", "HEAD"]) ?? "unknown",
+		branch: initialBranch,
+		head_sha: initialHead,
+		base_sha: initialHead,
 		gates: [],
 		verification: "not-run",
 	};
@@ -387,11 +456,16 @@ export function finalizeRun({ root = resolveRoot(), runId, candidateSha }) {
 	if (completed.status === "running") fail(`run is not terminal: ${runId}`);
 	if (
 		["awaiting-review", "succeeded"].includes(completed.status) &&
-		completed.gates.at(-1)?.status !== "GREEN"
+		(completed.gates.at(-1)?.status !== "GREEN" ||
+			completed.gates.at(-1)?.exit_code !== 0)
 	) {
-		fail("a review candidate requires a recorded GREEN gate");
+		fail("a review candidate requires a recorded GREEN gate with exit code 0");
 	}
-	const currentHead = git(root, ["rev-parse", "HEAD"]);
+	const currentHead = gitRequired(
+		root,
+		["rev-parse", "HEAD"],
+		"unable to resolve candidate HEAD",
+	);
 	if (!candidateSha || candidateSha !== currentHead) {
 		fail("candidate SHA must equal the current committed HEAD");
 	}
@@ -399,24 +473,34 @@ export function finalizeRun({ root = resolveRoot(), runId, candidateSha }) {
 	if (dirty.length > 0) {
 		fail(`candidate working tree is not clean: ${dirty.join(", ")}`);
 	}
-	const candidateBranch = git(root, ["branch", "--show-current"]);
+	const candidateBranch = gitRequired(
+		root,
+		["branch", "--show-current"],
+		"unable to resolve candidate branch",
+	);
 	if (!candidateBranch) fail("candidate HEAD must be attached to a branch");
 	if (["main", "master"].includes(candidateBranch)) {
 		fail(`candidate branch is protected: ${candidateBranch}`);
 	}
-	const durableDirectory = join(root, "docs", "factory", "runs");
-	mkdirSync(durableDirectory, { recursive: true });
+	const candidateFiles = candidateChangedFiles(
+		root,
+		completed.base_sha,
+		candidateSha,
+	);
+	const recordsDirectory = durableDirectory(root);
 	const durablePath = join(
-		durableDirectory,
+		recordsDirectory,
 		`${safeSegment(runId, "run id")}.json`,
 	);
 	const record = {
 		...completed,
 		worker_branch: completed.branch,
 		worker_head_sha: completed.head_sha,
+		worker_changed_files: completed.changed_files,
 		branch: candidateBranch,
 		head_sha: candidateSha,
 		candidate_sha: candidateSha,
+		changed_files: candidateFiles,
 		finalized_at: now(),
 		events: readEvents(root, runId),
 	};

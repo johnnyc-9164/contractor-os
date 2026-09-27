@@ -51,8 +51,9 @@ Finishing seals the runtime state but does not write
 controller finalizes the record against that exact clean `HEAD`, commits the
 record separately, and reruns review/checks on the final PR head. Run records are
 immutable; corrections create a new record. An `awaiting-review` or `succeeded`
-run can be finalized only when its latest recorded gate is `GREEN`; blocked and
-failed runs remain recordable without manufacturing a green result.
+run can be finalized only when its latest recorded gate is `GREEN` and exited
+0; blocked and failed runs remain recordable without manufacturing a green
+result.
 
 ```bash
 node .factory/harness.mjs start --task GH-123 --title "..."
@@ -100,6 +101,15 @@ only explicitly authorized merges or deploys. Finalization rejects `main`,
 Every Git read used by the trusted harness also overrides repository-local hooks
 and file-system monitors, ignores global/system configuration, and disables
 external diff and text-conversion commands as defense in depth.
+
+For a blocked or failed packet, the controller still creates a fresh clone at
+the approved base and switches to a non-protected evidence branch, but applies
+no worker source changes. It copies the validated ledger, finalizes against that
+clean no-op `HEAD`, and commits only the immutable record. Durable records keep
+the worker-reported file list as `worker_changed_files` and independently
+recompute `changed_files` from the approved base to the candidate. Finalization
+requires every Git cleanliness probe to succeed and rejects symlinks anywhere
+under the candidate's `docs/factory/runs` directory chain.
 
 ## Failure and retry
 

@@ -237,5 +237,16 @@ text-conversion commands. Commit the generated immutable record separately, then
 run independent review, CI, and required previews against the final PR head.
 Never finalize a dirty tree or a SHA other than the checked-out candidate.
 Finalization rejects `main`, `master`, a detached `HEAD`, and any dirty
-workspace. Do not replace the fresh-clone boundary or hardening flags with
-worker-repository configuration or hooks.
+workspace. It also requires both a parsed `GREEN` verdict and exit code 0,
+recomputes candidate changes from the approved base, and refuses any symlink in
+the durable-record directory chain. Do not replace the fresh-clone boundary or
+hardening flags with worker-repository configuration or hooks.
+
+For a `blocked` or `failed` packet, preserve evidence with the same trusted
+boundary instead of discarding the ledger: create a fresh clone at the approved
+base, switch to a non-protected `factory/evidence-<run-id>` branch without
+applying worker source changes, copy only the validated ledger files as above,
+and finalize against that clean no-op candidate `HEAD`. The resulting record
+keeps `worker_changed_files` but truthfully reports an empty candidate
+`changed_files` list. Commit only the immutable record, then retain or clean up
+the worker workspace according to controller policy.

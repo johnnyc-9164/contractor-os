@@ -5,6 +5,8 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -95,6 +97,7 @@ test("run lifecycle produces observable and durable evidence", () => {
 		status: "GREEN",
 		level: "full",
 		verdict: "FACTORY_GATES: level=full status=GREEN",
+		exit_code: 0,
 	});
 	writeFileSync(statePath, `${JSON.stringify(current, null, 2)}\n`, "utf8");
 
@@ -126,6 +129,7 @@ test("run lifecycle produces observable and durable evidence", () => {
 	assert.ok(durable.events.length >= 5);
 	assert.equal(durable.summary, "Lead flow ready for controller review");
 	assert.deepEqual(durable.changed_files, ["tracked.txt"]);
+	assert.deepEqual(durable.worker_changed_files, ["tracked.txt"]);
 	assert.equal(durable.worker_branch, "master");
 	assert.equal(durable.branch, "candidate");
 	assert.equal(durable.head_sha, candidateSha);
@@ -182,7 +186,26 @@ test("controller finalization rejects review candidates without a green gate", (
 	}).trim();
 	assert.throws(
 		() => finalizeRun({ root, runId: state.run_id, candidateSha }),
-		/a review candidate requires a recorded GREEN gate/,
+		/a review candidate requires a recorded GREEN gate with exit code 0/,
+	);
+});
+
+test("controller finalization rejects a green verdict with a nonzero exit", () => {
+	const root = repository();
+	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
+	const state = startRun({ root, task: "COS-80B", runId: "run-COS-80B" });
+	const statePath = join(root, ".factory/runtime/run-COS-80B/state.json");
+	const current = JSON.parse(readFileSync(statePath, "utf8"));
+	current.gates.push({ status: "GREEN", exit_code: 1 });
+	writeFileSync(statePath, `${JSON.stringify(current, null, 2)}\n`, "utf8");
+	finishRun({ root, runId: state.run_id, status: "awaiting-review" });
+	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	}).trim();
+	assert.throws(
+		() => finalizeRun({ root, runId: state.run_id, candidateSha }),
+		/a review candidate requires a recorded GREEN gate with exit code 0/,
 	);
 });
 
@@ -232,6 +255,62 @@ test("controller finalization disables worker repository Git hooks", () => {
 		else process.env.FACTORY_PROBE_MARKER = previousMarker;
 	}
 	assert.equal(existsSync(marker), false);
+});
+
+test("controller finalization fails closed when Git cleanliness probes error", () => {
+	const root = repository();
+	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
+	const state = startRun({ root, task: "COS-83", runId: "run-COS-83" });
+	finishRun({ root, runId: state.run_id, status: "blocked" });
+	writeFileSync(join(root, "tracked.txt"), "changed\n", "utf8");
+	writeFileSync(join(root, ".git/index"), "not a git index\n", "utf8");
+	assert.throws(
+		() =>
+			finalizeRun({ root, runId: state.run_id, candidateSha: state.base_sha }),
+		/unable to inspect unstaged candidate changes: Git command failed/,
+	);
+});
+
+test("controller finalization rejects symlinks in the durable record path", () => {
+	const root = repository();
+	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
+	const state = startRun({ root, task: "COS-84", runId: "run-COS-84" });
+	finishRun({ root, runId: state.run_id, status: "blocked" });
+	const external = mkdtempSync(join(tmpdir(), "contractor-factory-external-"));
+	rmSync(join(root, "docs/factory/runs"), { recursive: true });
+	symlinkSync(external, join(root, "docs/factory/runs"), "dir");
+	execFileSync("git", ["add", "-A"], { cwd: root });
+	execFileSync("git", ["commit", "-qm", "malicious durable path"], {
+		cwd: root,
+	});
+	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	}).trim();
+	assert.throws(
+		() => finalizeRun({ root, runId: state.run_id, candidateSha }),
+		/durable record path is not a real directory/,
+	);
+	assert.equal(existsSync(join(external, "run-COS-84.json")), false);
+});
+
+test("durable evidence recomputes candidate changed files from the approved base", () => {
+	const root = repository();
+	const state = startRun({ root, task: "COS-85", runId: "run-COS-85" });
+	writeFileSync(join(root, "tracked.txt"), "worker change\n", "utf8");
+	finishRun({ root, runId: state.run_id, status: "blocked" });
+	execFileSync("git", ["restore", "tracked.txt"], { cwd: root });
+	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
+	writeFileSync(join(root, "candidate.txt"), "controller candidate\n", "utf8");
+	execFileSync("git", ["add", "candidate.txt"], { cwd: root });
+	execFileSync("git", ["commit", "-qm", "different candidate"], { cwd: root });
+	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	}).trim();
+	const finalized = finalizeRun({ root, runId: state.run_id, candidateSha });
+	assert.deepEqual(finalized.worker_changed_files, ["tracked.txt"]);
+	assert.deepEqual(finalized.changed_files, ["candidate.txt"]);
 });
 
 test("success fails closed without green gates and independent acceptance", () => {
