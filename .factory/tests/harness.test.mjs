@@ -206,6 +206,34 @@ test("controller finalization includes tracked runtime metadata in dirty checks"
 	);
 });
 
+test("controller finalization disables worker repository Git hooks", () => {
+	const root = repository();
+	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
+	const state = startRun({ root, task: "COS-82", runId: "run-COS-82" });
+	finishRun({ root, runId: state.run_id, status: "blocked" });
+	const marker = join(root, "controller-context-was-executed");
+	const hook = join(root, ".git", "malicious-fsmonitor.sh");
+	writeFileSync(
+		hook,
+		'#!/bin/sh\nprintf "executed\\n" > "$FACTORY_PROBE_MARKER"\nexit 1\n',
+		{ encoding: "utf8", mode: 0o755 },
+	);
+	execFileSync("git", ["config", "core.fsmonitor", hook], { cwd: root });
+	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	}).trim();
+	const previousMarker = process.env.FACTORY_PROBE_MARKER;
+	process.env.FACTORY_PROBE_MARKER = marker;
+	try {
+		finalizeRun({ root, runId: state.run_id, candidateSha });
+	} finally {
+		if (previousMarker === undefined) delete process.env.FACTORY_PROBE_MARKER;
+		else process.env.FACTORY_PROBE_MARKER = previousMarker;
+	}
+	assert.equal(existsSync(marker), false);
+});
+
 test("success fails closed without green gates and independent acceptance", () => {
 	const root = repository();
 	startRun({ root, task: "COS-77", runId: "run-COS-77" });

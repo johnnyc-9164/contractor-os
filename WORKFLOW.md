@@ -216,7 +216,10 @@ the relative copy from the worker's uncommitted tree.
 For a review candidate, the controller creates and checks out a non-protected
 feature branch, then commits the complete source change without a durable run
 record. Use the same trusted harness, pointed at the clean worker workspace, to
-finalize; do not execute the worker's harness copy:
+finalize; do not execute the worker's harness copy. The trusted harness disables
+repository-local hooks and file-system monitors, ignores global/system Git
+configuration, and forbids external diff/text-conversion commands for its
+working-tree checks:
 
 ```bash
 FACTORY_ROOT="$WORKER_WORKSPACE" \
@@ -228,4 +231,5 @@ FACTORY_ROOT="$WORKER_WORKSPACE" \
 Commit the generated immutable record separately, then run independent review,
 CI, and required previews against the final PR head. Never finalize a dirty tree
 or a SHA other than the checked-out candidate. Finalization rejects `main`,
-`master`, a detached `HEAD`, and any dirty workspace.
+`master`, a detached `HEAD`, and any dirty workspace. Do not replace these
+hardening flags with worker-repository configuration or hooks.

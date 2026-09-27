@@ -93,6 +93,10 @@ separately commits the immutable record, runs fresh independent review and
 exact-SHA checks, opens/updates the PR, triages every review thread, and performs
 only explicitly authorized merges or deploys. Finalization rejects `main`,
 `master`, detached `HEAD`, dirty workspaces, and mismatched candidate SHAs.
+Every Git read used by the trusted harness overrides repository-local hooks and
+file-system monitors, ignores global/system configuration, and disables external
+diff and text-conversion commands so worker-controlled Git metadata cannot run in
+the controller context.
 
 ## Failure and retry
 

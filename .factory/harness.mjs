@@ -21,6 +21,12 @@ const TERMINAL_STATUSES = new Set([
 	"blocked",
 	"failed",
 ]);
+const DISABLED_GIT_HOOKS = fileURLToPath(
+	new URL("./disabled-git-hooks", import.meta.url),
+);
+const EMPTY_GIT_CONFIG = fileURLToPath(
+	new URL("./empty-gitconfig", import.meta.url),
+);
 
 function fail(message, code = 2) {
 	const error = new Error(message);
@@ -55,18 +61,40 @@ export function parseArgs(argv) {
 }
 
 function git(root, args) {
-	const result = spawnSync("git", args, {
-		cwd: root,
-		encoding: "utf8",
-		stdio: ["ignore", "pipe", "pipe"],
-	});
+	const result = spawnSync(
+		"git",
+		[
+			"-c",
+			`core.hooksPath=${DISABLED_GIT_HOOKS}`,
+			"-c",
+			"core.fsmonitor=false",
+			...args,
+		],
+		{
+			cwd: root,
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+			env: {
+				...process.env,
+				GIT_CONFIG_GLOBAL: EMPTY_GIT_CONFIG,
+				GIT_CONFIG_NOSYSTEM: "1",
+				GIT_OPTIONAL_LOCKS: "0",
+			},
+		},
+	);
 	return result.status === 0 ? result.stdout.trim() : null;
 }
 
 function workingTreeFiles(root) {
 	const outputs = [
-		git(root, ["diff", "--name-only"]),
-		git(root, ["diff", "--cached", "--name-only"]),
+		git(root, ["diff", "--no-ext-diff", "--no-textconv", "--name-only"]),
+		git(root, [
+			"diff",
+			"--no-ext-diff",
+			"--no-textconv",
+			"--cached",
+			"--name-only",
+		]),
 		git(root, ["ls-files", "--others", "--exclude-standard"]),
 	];
 	return [
@@ -81,7 +109,15 @@ function changedFiles(root) {
 		git(root, ["merge-base", "HEAD", "origin/master"]) ??
 		git(root, ["merge-base", "HEAD", "master"]);
 	const committed = base
-		? (git(root, ["diff", "--name-only", `${base}...HEAD`]) ?? "")
+		? (
+				git(root, [
+					"diff",
+					"--no-ext-diff",
+					"--no-textconv",
+					"--name-only",
+					`${base}...HEAD`,
+				]) ?? ""
+			)
 				.split("\n")
 				.filter(Boolean)
 		: [];
