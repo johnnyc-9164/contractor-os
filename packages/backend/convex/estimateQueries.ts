@@ -6,11 +6,24 @@ import { PROVIDER_CLERK, requireActiveBinding } from "./identity";
 const MAX_PAGE_SIZE = 50;
 const INTERACTIVE_ROLES = new Set(["owner", "principal", "crew", "viewer"]);
 
+const approvedEstimate = v.object({
+	estimateKey: v.string(),
+	leadKey: v.string(),
+	version: v.number(),
+	status: v.literal("approved"),
+	baseTotalCents: v.number(),
+});
+
 export const listApproved = query({
 	args: {
 		leadId: v.string(),
 		paginationOpts: paginationOptsValidator,
 	},
+	returns: v.object({
+		page: v.array(approvedEstimate),
+		isDone: v.boolean(),
+		continueCursor: v.string(),
+	}),
 	handler: async (ctx, args) => {
 		if (
 			!Number.isInteger(args.paginationOpts.numItems) ||
@@ -71,7 +84,6 @@ export const listApproved = query({
 			.paginate(args.paginationOpts);
 
 		return {
-			...result,
 			page: result.page.map((estimate) => ({
 				estimateKey: estimate.key,
 				leadKey: lead.key,
@@ -79,6 +91,8 @@ export const listApproved = query({
 				status: "approved" as const,
 				baseTotalCents: estimate.base_total_cents,
 			})),
+			isDone: result.isDone,
+			continueCursor: result.continueCursor,
 		};
 	},
 });
