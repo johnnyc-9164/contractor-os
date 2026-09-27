@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculate } from "./estimate-engine";
+import { calculate } from "./estimate_engine";
 
 describe("estimate engine", () => {
 	it("is deterministic and applies labor burden", () => {
