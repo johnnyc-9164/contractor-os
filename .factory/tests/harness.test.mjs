@@ -152,6 +152,20 @@ test("controller finalization rejects a dirty or mismatched candidate", () => {
 	);
 });
 
+test("controller finalization rejects protected branch candidates", () => {
+	const root = repository();
+	startRun({ root, task: "COS-79", runId: "run-COS-79" });
+	finishRun({ root, runId: "run-COS-79", status: "blocked" });
+	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	}).trim();
+	assert.throws(
+		() => finalizeRun({ root, runId: "run-COS-79", candidateSha }),
+		/candidate branch is protected: master/,
+	);
+});
+
 test("success fails closed without green gates and independent acceptance", () => {
 	const root = repository();
 	startRun({ root, task: "COS-77", runId: "run-COS-77" });

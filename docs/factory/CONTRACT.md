@@ -79,13 +79,18 @@ paths, source, diffs, prompts, identifiers, credentials, secrets, customer data,
 or proprietary payloads. Its output cannot waive deterministic checks,
 independent review, approval, or a failure.
 
-On receipt of every terminal packet, the controller first runs
+On receipt of every terminal packet, the controller uses a separate clean
+controller-owned checkout pinned to the approved trusted factory SHA and a token
+limited to issue-label access. It runs that checkout's
 `.factory/scripts/bootstrap-github.sh --handoff <issue>` to remove
-`symphony-ready` and verify redispatch is disabled. The controller then commits
-the complete candidate, finalizes and separately commits its immutable record,
-runs fresh independent review and exact-SHA checks, opens/updates the PR, triages
-every review thread, and performs only explicitly authorized merges or
-deployments.
+`symphony-ready` and verify redispatch is disabled. It never executes the
+worker-workspace copy before review. The controller then creates a non-protected
+feature branch and commits the complete candidate. It runs the trusted checkout's
+harness with `FACTORY_ROOT` pointed at the clean worker workspace, finalizes and
+separately commits the immutable record, runs fresh independent review and
+exact-SHA checks, opens/updates the PR, triages every review thread, and performs
+only explicitly authorized merges or deploys. Finalization rejects `main`,
+`master`, detached `HEAD`, dirty workspaces, and mismatched candidate SHAs.
 
 ## Failure and retry
 

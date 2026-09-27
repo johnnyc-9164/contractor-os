@@ -361,6 +361,9 @@ export function finalizeRun({ root = resolveRoot(), runId, candidateSha }) {
 	}
 	const candidateBranch = git(root, ["branch", "--show-current"]);
 	if (!candidateBranch) fail("candidate HEAD must be attached to a branch");
+	if (["main", "master"].includes(candidateBranch)) {
+		fail(`candidate branch is protected: ${candidateBranch}`);
+	}
 	const durableDirectory = join(root, "docs", "factory", "runs");
 	mkdirSync(durableDirectory, { recursive: true });
 	const durablePath = join(

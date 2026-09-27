@@ -196,20 +196,35 @@ and classifier triage, change labels/workpads, merge, or deploy.
 
 ## Controller-only handoff transition
 
-These steps are not worker commands. As soon as any completion packet is
-received, the controller first runs
-`.factory/scripts/bootstrap-github.sh --handoff "{{ issue.url }}"`. The command
-idempotently removes `symphony-ready` and verifies the issue is no longer
-dispatchable before review, retry, or cleanup continues.
-
-For a review candidate, the controller then commits the complete source change
-without a durable run record. With that clean candidate checked out, run:
+These steps are not worker commands. The controller never executes a script from
+the worker workspace before independent review. As soon as any completion packet
+is received, use a separate controller-owned checkout whose clean `HEAD` equals
+the approved trusted factory SHA, with a token limited to issue-label access:
 
 ```bash
-node .factory/harness.mjs finalize --run "$RUN_ID" \
-  --candidate-sha "$(git rev-parse HEAD)"
+test -z "$(git -C "$CONTROLLER_FACTORY_ROOT" status --porcelain)"
+test "$(git -C "$CONTROLLER_FACTORY_ROOT" rev-parse HEAD)" = "$TRUSTED_FACTORY_SHA"
+"$CONTROLLER_FACTORY_ROOT/.factory/scripts/bootstrap-github.sh" \
+  --handoff "{{ issue.url }}"
+```
+
+The trusted command idempotently removes `symphony-ready` and verifies the issue
+is no longer dispatchable before review, retry, or cleanup continues. Do not run
+the relative copy from the worker's uncommitted tree.
+
+For a review candidate, the controller creates and checks out a non-protected
+feature branch, then commits the complete source change without a durable run
+record. Use the same trusted harness, pointed at the clean worker workspace, to
+finalize; do not execute the worker's harness copy:
+
+```bash
+FACTORY_ROOT="$WORKER_WORKSPACE" \
+  node "$CONTROLLER_FACTORY_ROOT/.factory/harness.mjs" finalize \
+  --run "$RUN_ID" \
+  --candidate-sha "$(git -C "$WORKER_WORKSPACE" rev-parse HEAD)"
 ```
 
 Commit the generated immutable record separately, then run independent review,
 CI, and required previews against the final PR head. Never finalize a dirty tree
-or a SHA other than the checked-out candidate.
+or a SHA other than the checked-out candidate. Finalization rejects `main`,
+`master`, a detached `HEAD`, and any dirty workspace.
