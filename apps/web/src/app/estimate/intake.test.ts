@@ -54,14 +54,15 @@ describe("validateEstimateIntake", () => {
 });
 
 describe("buildEstimateHandoff", () => {
-	it("builds an address-free email draft that says the request is not sent", () => {
+	it("builds an address-free email draft with interoperable CRLF lines", () => {
 		const href = buildEstimateHandoff(validIntake);
 		const decoded = decodeURIComponent(href);
 
 		expect(href).toMatch(/^mailto:\?subject=/);
-		expect(decoded).toContain("not yet sent or scheduled");
+		expect(decoded).toContain("\r\nCONTACT\r\n");
+		expect(decoded).not.toContain("not yet sent");
 		expect(decoded).toContain("Jordan Lee");
 		expect(decoded).toContain("Interior painting");
-		expect(decoded).toContain("The recipient must confirm");
+		expect(decoded).toContain("No appointment has been scheduled");
 	});
 });
