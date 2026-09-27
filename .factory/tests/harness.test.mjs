@@ -326,6 +326,20 @@ test("success fails closed without green gates and independent acceptance", () =
 			}),
 		/requires a recorded GREEN gate/,
 	);
+	const statePath = join(root, ".factory/runtime/run-COS-77/state.json");
+	const current = JSON.parse(readFileSync(statePath, "utf8"));
+	current.gates.push({ status: "GREEN", exit_code: 1 });
+	writeFileSync(statePath, `${JSON.stringify(current, null, 2)}\n`, "utf8");
+	assert.throws(
+		() =>
+			finishRun({
+				root,
+				runId: "run-COS-77",
+				status: "succeeded",
+				verification: "accepted",
+			}),
+		/requires a recorded GREEN gate with exit code 0/,
+	);
 });
 
 test("doctor reports file and command checks without exposing values", () => {

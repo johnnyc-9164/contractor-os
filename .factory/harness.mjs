@@ -422,8 +422,11 @@ export function finishRun({
 	const state = readState(root, runId);
 	if (state.status !== "running") fail(`run is already terminal: ${runId}`);
 	const latestGate = state.gates.at(-1) ?? null;
-	if (status === "succeeded" && latestGate?.status !== "GREEN") {
-		fail("a succeeded run requires a recorded GREEN gate");
+	if (
+		status === "succeeded" &&
+		(latestGate?.status !== "GREEN" || latestGate?.exit_code !== 0)
+	) {
+		fail("a succeeded run requires a recorded GREEN gate with exit code 0");
 	}
 	if (status === "succeeded" && verification !== "accepted") {
 		fail("a succeeded run requires independent verification=accepted");
