@@ -33,7 +33,7 @@ export default function RootLayout({
 			>
 				<PwaRegistration />
 
-				<ClerkProvider>
+				<ClerkProvider signInUrl="/sign-in">
 					<Providers>
 						<div className="grid h-svh grid-rows-[auto_1fr]">
 							<Header />
