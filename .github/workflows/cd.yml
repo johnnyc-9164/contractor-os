@@ -34,7 +34,8 @@ jobs:
     env:
       PREVIEW_TARGET: ${{ inputs.target }}
       PREVIEW_URL: ${{ inputs.preview_url }}
-      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      REQUESTED_SHA: ${{ inputs.expected_sha }}
+      EXPECTED_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +47,13 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+
+      - name: bind requested SHA to the dispatched revision
+        run: |
+          if [ "$REQUESTED_SHA" != "$EXPECTED_SHA" ]; then
+            echo "Requested SHA $REQUESTED_SHA does not match dispatched SHA $EXPECTED_SHA"
+            exit 1
+          fi
 
       - run: pnpm install --frozen-lockfile
 
