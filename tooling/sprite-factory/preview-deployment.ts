@@ -13,11 +13,21 @@ export type PreviewVerificationResult = {
 	previewUrl: string;
 	expectedSha: string;
 	observedSha: string;
+	environment: "preview";
 	convex: "ok";
 };
 
+export function assertMatchingSha(expectedSha: string, observedSha: string) {
+	if (observedSha !== expectedSha) {
+		throw new Error(
+			`Preview SHA mismatch: expected ${expectedSha}, observed ${observedSha}`,
+		);
+	}
+}
+
 type HealthPayload = {
 	sha?: unknown;
+	environment?: unknown;
 	convex?: unknown;
 };
 
@@ -68,8 +78,8 @@ export async function verifyPreviewDeployment(
 	}
 
 	const expectedSha = required(input.expectedSha, "Expected SHA").toLowerCase();
-	if (!/^[0-9a-f]{7,40}$/u.test(expectedSha)) {
-		throw new Error("Expected SHA must contain 7 to 40 hexadecimal characters");
+	if (!/^[0-9a-f]{40}$/u.test(expectedSha)) {
+		throw new Error("Expected SHA must be the full 40-character commit SHA");
 	}
 	const previewUrl = previewOrigin(required(input.previewUrl, "Preview URL"));
 	const headers: Record<string, string> = { accept: "application/json" };
@@ -103,11 +113,16 @@ export async function verifyPreviewDeployment(
 		typeof payload.sha === "string" && payload.sha.trim()
 			? payload.sha.trim().toLowerCase()
 			: "<missing>";
-	if (observedSha !== expectedSha) {
+	const environment =
+		typeof payload.environment === "string" && payload.environment.trim()
+			? payload.environment.trim().toLowerCase()
+			: "<missing>";
+	if (environment !== "preview") {
 		throw new Error(
-			`Preview SHA mismatch: expected ${expectedSha}, observed ${observedSha}`,
+			`Deployment environment must be preview; observed ${environment}`,
 		);
 	}
+	assertMatchingSha(expectedSha, observedSha);
 
 	const convex =
 		typeof payload.convex === "string" && payload.convex.trim()
@@ -124,6 +139,7 @@ export async function verifyPreviewDeployment(
 		previewUrl,
 		expectedSha,
 		observedSha,
+		environment: "preview",
 		convex: "ok",
 	};
 }
