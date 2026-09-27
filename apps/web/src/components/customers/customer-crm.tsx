@@ -227,13 +227,19 @@ export function CustomerCrm({
 	onLoadMore,
 }: CustomerCrmProps) {
 	const [query, setQuery] = useState("");
-	const [selectedCustomer, setSelectedCustomer] =
-		useState<CustomerRecord | null>(null);
+	const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
+		null,
+	);
 	const customers = useMemo(() => selectCustomers(leads), [leads]);
 	const visibleCustomers = useMemo(
 		() => filterCustomers(customers, query),
 		[customers, query],
 	);
+	const selectedCustomer = selectedCustomerId
+		? (customers.find(
+				(customer) => customer.identifier === selectedCustomerId,
+			) ?? null)
+		: null;
 	const isInitialLoading = status === "loading";
 
 	return (
@@ -319,7 +325,9 @@ export function CustomerCrm({
 								<CustomerRow
 									customer={customer}
 									key={customer.id}
-									onSelect={setSelectedCustomer}
+									onSelect={(selected) =>
+										setSelectedCustomerId(selected.identifier)
+									}
 								/>
 							))}
 						</div>
@@ -340,7 +348,7 @@ export function CustomerCrm({
 
 			<CustomerDetail
 				customer={selectedCustomer}
-				onClose={() => setSelectedCustomer(null)}
+				onClose={() => setSelectedCustomerId(null)}
 			/>
 		</>
 	);
