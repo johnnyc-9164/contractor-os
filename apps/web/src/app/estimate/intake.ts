@@ -72,7 +72,6 @@ export function buildEstimateHandoff(values: EstimateIntake) {
 	const subject = `Paint estimate request: ${values.projectType}`;
 	const body = [
 		"PAINT ESTIMATE REQUEST",
-		"Status: Prepared by the customer; not yet sent or scheduled.",
 		"",
 		"CONTACT",
 		`Name: ${values.name.trim()}`,
@@ -86,8 +85,8 @@ export function buildEstimateHandoff(values: EstimateIntake) {
 		"Details:",
 		values.details.trim(),
 		"",
-		"The recipient must confirm receipt, scope, pricing, and availability.",
-	].join("\n");
+		"The contractor must confirm receipt, scope, pricing, and availability. No appointment has been scheduled.",
+	].join("\r\n");
 
 	return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
