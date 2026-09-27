@@ -55,6 +55,10 @@ function repository() {
 
 test("run lifecycle produces observable and durable evidence", () => {
 	const root = repository();
+	execFileSync("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], {
+		cwd: root,
+	});
+	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
 	const state = startRun({
 		root,
 		task: "COS-76",

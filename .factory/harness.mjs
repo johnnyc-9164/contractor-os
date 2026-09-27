@@ -63,15 +63,11 @@ function git(root, args) {
 	return result.status === 0 ? result.stdout.trim() : null;
 }
 
-function changedFiles(root) {
-	const base =
-		git(root, ["merge-base", "HEAD", "origin/master"]) ??
-		git(root, ["merge-base", "HEAD", "master"]);
+function workingTreeFiles(root) {
 	const outputs = [
 		git(root, ["diff", "--name-only"]),
 		git(root, ["diff", "--cached", "--name-only"]),
 		git(root, ["ls-files", "--others", "--exclude-standard"]),
-		base ? git(root, ["diff", "--name-only", `${base}...HEAD`]) : null,
 	];
 	return [
 		...new Set(
@@ -80,6 +76,18 @@ function changedFiles(root) {
 				.filter((path) => path && !path.startsWith(".factory/runtime/")),
 		),
 	].sort();
+}
+
+function changedFiles(root) {
+	const base =
+		git(root, ["merge-base", "HEAD", "origin/master"]) ??
+		git(root, ["merge-base", "HEAD", "master"]);
+	const committed = base
+		? (git(root, ["diff", "--name-only", `${base}...HEAD`]) ?? "")
+				.split("\n")
+				.filter(Boolean)
+		: [];
+	return [...new Set([...workingTreeFiles(root), ...committed])].sort();
 }
 
 export function resolveRoot(explicitRoot = process.env.FACTORY_ROOT) {
@@ -347,7 +355,7 @@ export function finalizeRun({ root = resolveRoot(), runId, candidateSha }) {
 	if (!candidateSha || candidateSha !== currentHead) {
 		fail("candidate SHA must equal the current committed HEAD");
 	}
-	const dirty = changedFiles(root);
+	const dirty = workingTreeFiles(root);
 	if (dirty.length > 0) {
 		fail(`candidate working tree is not clean: ${dirty.join(", ")}`);
 	}
