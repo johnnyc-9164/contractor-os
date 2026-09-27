@@ -185,10 +185,31 @@ node .factory/harness.mjs finish --run "$RUN_ID" \
   --summary "Implementation and deterministic gates ready for controller review"
 ```
 
-Leave the working tree and generated `docs/factory/runs/<run-id>.json` intact.
-Return one completion packet containing issue ID, run ID, base SHA, changed files,
-diff hash, reproduction, command exit codes, exact gate verdict, rendered evidence,
-run-record path, blockers, and out-of-scope findings.
+Leave the working tree and `.factory/runtime/<run-id>/` ledger intact. The worker
+does not create the immutable `docs/factory/runs/<run-id>.json` record. Return one
+completion packet containing issue ID, run ID, base SHA, changed files, diff hash,
+reproduction, command exit codes, exact gate verdict, rendered evidence, runtime
+ledger path, blockers, and out-of-scope findings.
 
 The controller alone may commit, push, open/update a PR, run independent review
 and classifier triage, change labels/workpads, merge, or deploy.
+
+## Controller-only handoff transition
+
+These steps are not worker commands. As soon as any completion packet is
+received, the controller first runs
+`.factory/scripts/bootstrap-github.sh --handoff "{{ issue.url }}"`. The command
+idempotently removes `symphony-ready` and verifies the issue is no longer
+dispatchable before review, retry, or cleanup continues.
+
+For a review candidate, the controller then commits the complete source change
+without a durable run record. With that clean candidate checked out, run:
+
+```bash
+node .factory/harness.mjs finalize --run "$RUN_ID" \
+  --candidate-sha "$(git rev-parse HEAD)"
+```
+
+Commit the generated immutable record separately, then run independent review,
+CI, and required previews against the final PR head. Never finalize a dirty tree
+or a SHA other than the checked-out candidate.

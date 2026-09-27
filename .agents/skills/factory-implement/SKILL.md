@@ -45,10 +45,11 @@ Read `AGENTS.md`, `CLAUDE.md`, `docs/factory/CHARTER.md`, and
    without the implementation.
 3. Finish as `awaiting-review`, `blocked`, or `failed`; workers do not accept
    their own changes.
-4. Leave the working tree and generated run record intact.
+4. Leave the working tree and ignored runtime ledger intact. The controller
+   creates the durable run record only after committing the source candidate.
 5. Return one completion packet: issue/run IDs, base SHA, changed files, diff
    hash, reproduction, command exits, exact gate verdict, runtime evidence,
-   record path, blockers, and out-of-scope findings.
+   runtime-ledger path, blockers, and out-of-scope findings.
 
 Never write GitHub comments or labels, commit, push, open/update a PR, merge,
 deploy, force-push, change secrets, or rewrite factory policy. The controller owns

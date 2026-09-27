@@ -334,18 +334,42 @@ export function finishRun({
 		verification,
 	});
 	const completed = readState(root, runId);
+	return {
+		...completed,
+		record_status: "pending-controller-finalization",
+	};
+}
+
+export function finalizeRun({ root = resolveRoot(), runId, candidateSha }) {
+	const completed = readState(root, runId);
+	if (completed.status === "running") fail(`run is not terminal: ${runId}`);
+	const currentHead = git(root, ["rev-parse", "HEAD"]);
+	if (!candidateSha || candidateSha !== currentHead) {
+		fail("candidate SHA must equal the current committed HEAD");
+	}
+	const dirty = changedFiles(root);
+	if (dirty.length > 0) {
+		fail(`candidate working tree is not clean: ${dirty.join(", ")}`);
+	}
 	const durableDirectory = join(root, "docs", "factory", "runs");
 	mkdirSync(durableDirectory, { recursive: true });
 	const durablePath = join(
 		durableDirectory,
 		`${safeSegment(runId, "run id")}.json`,
 	);
-	const record = { ...completed, events: readEvents(root, runId) };
+	const record = {
+		...completed,
+		worker_head_sha: completed.head_sha,
+		head_sha: candidateSha,
+		candidate_sha: candidateSha,
+		finalized_at: now(),
+		events: readEvents(root, runId),
+	};
 	writeFileSync(durablePath, `${JSON.stringify(record, null, 2)}\n`, {
 		encoding: "utf8",
 		flag: "wx",
 	});
-	return { ...completed, durable_path: durablePath };
+	return { ...record, durable_path: durablePath };
 }
 
 export function getStatus({ root = resolveRoot(), runId } = {}) {
@@ -480,6 +504,15 @@ export async function main(argv = process.argv.slice(2)) {
 			process.stdout.write(`${JSON.stringify(state)}\n`);
 			return 0;
 		}
+		case "finalize": {
+			const record = finalizeRun({
+				root,
+				runId: options.run,
+				candidateSha: options["candidate-sha"],
+			});
+			process.stdout.write(`${JSON.stringify(record)}\n`);
+			return 0;
+		}
 		case "status": {
 			const status = getStatus({ root, runId: options.run });
 			if (options.json)
@@ -499,7 +532,9 @@ export async function main(argv = process.argv.slice(2)) {
 			return result.status === "pass" ? 0 : 1;
 		}
 		default:
-			fail("usage: harness.mjs start|event|exec|gate|finish|status|doctor");
+			fail(
+				"usage: harness.mjs start|event|exec|gate|finish|finalize|status|doctor",
+			);
 	}
 }
 

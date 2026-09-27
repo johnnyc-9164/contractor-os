@@ -31,8 +31,9 @@ permission to repair GitHub state.
    payloads.
 8. Run the declared fail-closed gate and preserve its exact verdict.
 9. Finish as `awaiting-review`, `blocked`, or `failed`.
-10. Leave the working tree and run record intact and return a completion packet
-    to the controller.
+10. Leave the working tree and ignored runtime ledger intact and return a
+    completion packet to the controller. Workers do not create the durable run
+    record.
 
 The worker never writes issue comments/labels, commits, pushes, opens or updates
 a PR, merges, deploys, force-pushes, or changes secrets.
@@ -45,9 +46,11 @@ The ignored local ledger lives under `.factory/runtime/<run-id>/`:
 - `events.jsonl` is append-only execution history.
 - `node .factory/harness.mjs status --json` is the observer interface.
 
-Finishing writes `docs/factory/runs/<run-id>.json`. The controller commits that
-record only after reconciling it with the full candidate and evidence. Run
-records are immutable; corrections create a new record.
+Finishing seals the runtime state but does not write
+`docs/factory/runs/<run-id>.json`. After committing the source candidate, the
+controller finalizes the record against that exact clean `HEAD`, commits the
+record separately, and reruns review/checks on the final PR head. Run records are
+immutable; corrections create a new record.
 
 ```bash
 node .factory/harness.mjs start --task GH-123 --title "..."
@@ -56,6 +59,8 @@ node .factory/harness.mjs exec --run <id> --phase reproduction -- <command...>
 node .factory/harness.mjs gate --run <id> --level full
 node .factory/harness.mjs finish --run <id> --status awaiting-review \
   --verification not-run --summary "Ready for controller review"
+node .factory/harness.mjs finalize --run <id> \
+  --candidate-sha "$(git rev-parse HEAD)" # controller only, clean candidate
 node .factory/harness.mjs status --json
 ```
 
@@ -74,9 +79,13 @@ paths, source, diffs, prompts, identifiers, credentials, secrets, customer data,
 or proprietary payloads. Its output cannot waive deterministic checks,
 independent review, approval, or a failure.
 
-The controller commits the complete candidate, runs fresh independent review and
-exact-SHA checks, opens/updates the PR, triages every review thread, and performs
-only explicitly authorized merges or deployments.
+On receipt of every terminal packet, the controller first runs
+`.factory/scripts/bootstrap-github.sh --handoff <issue>` to remove
+`symphony-ready` and verify redispatch is disabled. The controller then commits
+the complete candidate, finalizes and separately commits its immutable record,
+runs fresh independent review and exact-SHA checks, opens/updates the PR, triages
+every review thread, and performs only explicitly authorized merges or
+deployments.
 
 ## Failure and retry
 

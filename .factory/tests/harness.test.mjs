@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import {
 	doctor,
+	finalizeRun,
 	finishRun,
 	getStatus,
 	recordEvent,
@@ -84,18 +91,57 @@ test("run lifecycle produces observable and durable evidence", () => {
 	const finished = finishRun({
 		root,
 		runId: state.run_id,
-		status: "succeeded",
-		summary: "Lead flow verified",
-		verification: "accepted",
+		status: "awaiting-review",
+		summary: "Lead flow ready for controller review",
 	});
-	assert.equal(finished.status, "succeeded");
-	const durable = JSON.parse(
-		readFileSync(join(root, "docs/factory/runs/run-COS-76.json"), "utf8"),
-	);
+	assert.equal(finished.status, "awaiting-review");
+	assert.equal(finished.record_status, "pending-controller-finalization");
+	const durablePath = join(root, "docs/factory/runs/run-COS-76.json");
+	assert.equal(existsSync(durablePath), false);
+
+	execFileSync("git", ["add", "tracked.txt"], { cwd: root });
+	execFileSync("git", ["commit", "-qm", "candidate"], { cwd: root });
+	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	}).trim();
+	const finalized = finalizeRun({
+		root,
+		runId: state.run_id,
+		candidateSha,
+	});
+	assert.equal(finalized.candidate_sha, candidateSha);
+	const durable = JSON.parse(readFileSync(durablePath, "utf8"));
 	assert.ok(durable.events.length >= 5);
-	assert.equal(durable.summary, "Lead flow verified");
+	assert.equal(durable.summary, "Lead flow ready for controller review");
 	assert.deepEqual(durable.changed_files, ["tracked.txt"]);
-	assert.equal(getStatus({ root }).runs[0].status, "succeeded");
+	assert.equal(durable.head_sha, candidateSha);
+	assert.notEqual(durable.worker_head_sha, candidateSha);
+	assert.equal(getStatus({ root }).runs[0].status, "awaiting-review");
+});
+
+test("controller finalization rejects a dirty or mismatched candidate", () => {
+	const root = repository();
+	startRun({ root, task: "COS-78", runId: "run-COS-78" });
+	finishRun({ root, runId: "run-COS-78", status: "blocked" });
+	assert.throws(
+		() =>
+			finalizeRun({
+				root,
+				runId: "run-COS-78",
+				candidateSha: "not-current-head",
+			}),
+		/candidate SHA must equal/,
+	);
+	writeFileSync(join(root, "untracked.ts"), "export {};\n", "utf8");
+	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	}).trim();
+	assert.throws(
+		() => finalizeRun({ root, runId: "run-COS-78", candidateSha }),
+		/candidate working tree is not clean/,
+	);
 });
 
 test("success fails closed without green gates and independent acceptance", () => {

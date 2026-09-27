@@ -88,6 +88,12 @@ The controller records a decision at every material seam:
   independent verification can accept a run.
 - Workers never mutate GitHub or external deployment state. They leave a complete
   local completion packet and working tree for the controller.
+- On every terminal worker packet, the controller first removes
+  `symphony-ready` with `bootstrap-github.sh --handoff <issue>` and verifies the
+  issue is no longer dispatchable.
+- The controller commits the source candidate before running
+  `harness.mjs finalize --candidate-sha <current-head>`. It commits the immutable
+  run record separately and reruns exact-head review and checks.
 
 ## Communication
 

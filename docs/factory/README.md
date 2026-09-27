@@ -9,8 +9,10 @@ preserving controller ownership of GitHub and deployment state.
 ```bash
 ./.factory/scripts/doctor.sh
 ./.factory/scripts/bootstrap-github.sh
+./.factory/scripts/bootstrap-github.sh --handoff <issue-number-or-url>
 node .factory/harness.mjs status
 node .factory/harness.mjs status --json
+node .factory/harness.mjs finalize --run <run-id> --candidate-sha "$(git rev-parse HEAD)"
 ./.claude/scripts/gates.sh fast
 ./.claude/scripts/gates.sh full
 ```
@@ -19,9 +21,15 @@ node .factory/harness.mjs status --json
 terminal status, and run evidence. It can be consumed from the Sprite controller
 or a dashboard.
 
-Preview admission labels with `bootstrap-github.sh`; use `--apply` only for
-the intended repository. An issue is dispatchable only when open with both
-`symphony-ready` and `contract-approved`. Workers never add or remove them.
+Preview admission labels with `bootstrap-github.sh`; use `--apply` only for the
+intended repository. An issue is dispatchable only when open with both
+`symphony-ready` and `contract-approved`. Workers never add or remove them. On
+every terminal worker handoff, the controller runs `--handoff` first; it removes
+`symphony-ready` idempotently and verifies redispatch is disabled.
+
+Workers seal only the ignored runtime ledger. The controller commits the source
+candidate, runs `finalize` against that exact clean commit, then commits the
+immutable run record separately before exact-head review and CI.
 
 ## Ownership
 
@@ -32,7 +40,7 @@ the intended repository. An issue is dispatchable only when open with both
 | Repository policy and stop conditions | `CHARTER.md` |
 | Source orientation | Graft query/status/revision |
 | Per-run current state | `.factory/runtime/<run-id>/state.json` |
-| Immutable run evidence | `docs/factory/runs/*.json` |
+| Candidate-SHA finalization and immutable run evidence | Controller + `docs/factory/runs/*.json` |
 | Commit, push, PR, review, CI interpretation | Controller |
 | Merge and deployment | Controller with explicit authority |
 

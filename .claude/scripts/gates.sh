@@ -77,12 +77,12 @@ fi
 if required architecture; then
   printf '\n=== gate: architecture ===\n'
   ARCH_FAIL=0
-  if git grep -n -F 'from "convex/react"' -- packages/ui >/dev/null 2>&1 ||
-     git grep -n -F "from 'convex/react'" -- packages/ui >/dev/null 2>&1; then
+  if git grep --untracked -n -F 'from "convex/react"' -- packages/ui >/dev/null 2>&1 ||
+     git grep --untracked -n -F "from 'convex/react'" -- packages/ui >/dev/null 2>&1; then
     echo "architecture: packages/ui must remain backend-independent"
     ARCH_FAIL=1
   fi
-  CORE_MATCHES="$(git grep -n -F '@johnnyc2026/contractor-os-core' -- apps packages 2>/dev/null || true)"
+  CORE_MATCHES="$(git grep --untracked -n -F '@johnnyc2026/contractor-os-core' -- apps packages 2>/dev/null || true)"
   if printf '%s\n' "$CORE_MATCHES" | grep -v '^packages/backend/' | grep -q .; then
     echo "architecture: contractor-os-core imports belong under packages/backend"
     ARCH_FAIL=1
