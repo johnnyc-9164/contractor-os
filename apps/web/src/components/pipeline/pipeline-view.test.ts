@@ -3,6 +3,7 @@ import type { PipelineLead } from "./lead-card";
 import {
 	countLeads,
 	filterLeadColumns,
+	findLeadById,
 	type LeadColumns,
 	leadMatchesQuery,
 } from "./pipeline-view";
@@ -64,5 +65,26 @@ describe("countLeads", () => {
 	it("counts cards across every stage", () => {
 		expect(countLeads(columns)).toBe(2);
 		expect(countLeads(filterLeadColumns(columns, "missing"))).toBe(0);
+	});
+});
+
+describe("findLeadById", () => {
+	it("resolves selection from the latest active columns", () => {
+		const updatedSarah = { ...sarah, stage: "Qualifying" as const };
+		const updatedColumns: LeadColumns = {
+			Prospect: [],
+			Qualifying: [updatedSarah],
+		};
+
+		expect(findLeadById(updatedColumns, [], sarah.id)).toBe(updatedSarah);
+	});
+
+	it("resolves terminal records and clears missing selections", () => {
+		const wonSarah = { ...sarah, stage: "Won" as const };
+
+		expect(findLeadById(columns, [wonSarah], wonSarah.id)).toBe(sarah);
+		expect(findLeadById({}, [wonSarah], wonSarah.id)).toBe(wonSarah);
+		expect(findLeadById(columns, [wonSarah], "missing")).toBeNull();
+		expect(findLeadById(columns, [wonSarah], null)).toBeNull();
 	});
 });
