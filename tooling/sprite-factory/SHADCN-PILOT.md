@@ -1,7 +1,7 @@
 # DS1 shadcn registry pilot
 
 Date: 2026-09-27
-Bead: `cos-ds1`
+GitHub task: #58 (legacy Bead: `cos-ds1`)
 Sprite: `factory-shadcn-pilot`
 Branch: `codex/cos-ds1-shadcn-pilot`
 Base: `ccbe7ec176ae4cd4287a773a4fdd4c90ed2180c4`
@@ -10,7 +10,7 @@ Base: `ccbe7ec176ae4cd4287a773a4fdd4c90ed2180c4`
 
 This pilot adds a small registry-driven shared UI primitive and applies it to the lead pipeline card. It also adds cost-aware review triage using classifier.dev's anonymous free endpoint. The classifier can suggest review effort only. It cannot declare a change safe, satisfy an independent review, waive repository checks, or authorize a merge.
 
-The avatar adds initials from the lead title, with identifier and question-mark fallbacks. The classifier receives only coarse metadata generated locally: category, extension, status, and addition/deletion counts. It never receives paths, source, diff hunks, prompts, secrets, or repository identifiers. Protected paths are handled locally and assigned deep review. Documentation and static assets are assigned light review locally. Classifier uncertainty, request failures, malformed responses, and timeouts fall back to standard review. All outputs keep independent review and mandatory checks set to true.
+The avatar adds initials from the lead title, with identifier and question-mark fallbacks. The classifier receives only coarse metadata generated locally: category, extension, status, and addition/deletion counts. It never receives paths, source, diff hunks, prompts, secrets, or repository identifiers. Protected paths are handled locally and assigned deep review. This includes root and nested control files named `vercel.json`, `biome.json`, `lefthook.yml`, `.vercelignore`, `.gitignore`, `skills-lock.json`, or `bunfig.toml`, after separator, case, and dot-segment normalization. Documentation and static assets are assigned light review locally. Classifier uncertainty, request failures, malformed responses, and timeouts fall back to standard review. All outputs keep independent review and mandatory checks set to true.
 
 ## Registry execution evidence
 
@@ -36,7 +36,7 @@ References (checked 2026-09-27):
 
 The endpoint is external and best-effort; service terms, free limits, and availability may change. Local deterministic rules and mandatory checks remain authoritative.
 
-## Verification
+## Original pilot verification (historical)
 
 - Red-stage proof on the unmodified base: 7 failed / 2 passed across the new tests, with failures at the intended missing-initials and missing-triage assertions.
 - Focused tests after implementation: 16/16 passed.
@@ -45,7 +45,7 @@ The endpoint is external and best-effort; service terms, free limits, and availa
 - Biome checks for every modified TypeScript/config file: passed.
 - `git diff --check`: passed.
 - Web typecheck: passed after `varlock codegen` generated the ignored `apps/web/env` module.
-- Production build: blocked before Next compilation because the fresh Sprite has no production configuration values for `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, and `CLERK_SECRET_KEY`; no credentials were copied or fabricated. Authenticated visual acceptance, exact-SHA Preview, independent review, and CI remain required gates before merge. No credentials were added to the Sprite.
+- Production build: blocked before Next compilation because the fresh Sprite has no approved development configuration values for `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, and `CLERK_SECRET_KEY`; no credentials were copied or fabricated. Authenticated visual acceptance, exact-SHA Preview, independent review, and CI remain required gates before merge. No credentials were added to the Sprite.
 
 ## Files
 
@@ -57,4 +57,13 @@ The endpoint is external and best-effort; service terms, free limits, and availa
 
 The new Vitest glob includes the factory triage tests in normal repository runs.
 
-The committed-head triage run (`5e9b20055b38a11b02e16b65352833d918375e7b` against the base above) produced local deep-review recommendations for the triage tooling, report, and Vitest config. The four ordinary application/UI files fell back to standard review because the remote result did not meet the confidence threshold (the endpoint's response is not treated as review evidence). Every result retained both mandatory gates.
+## Evidence for the submitted revision
+
+The controller records current evidence after committing the complete candidate. Historical test totals above do not establish acceptance of a later revision.
+
+1. Confirm that the candidate worktree is clean and record the branch, submitted commit from `git rev-parse HEAD`, and integration base.
+2. Run `corepack pnpm exec tsx tooling/sprite-factory/jev-review-triage.ts --base ccbe7ec176ae4cd4287a773a4fdd4c90ed2180c4` inside the assigned Sprite. Save its JSON outside the tracked worktree, for example under `/home/sprite/symphony/evidence/GH-58/`.
+3. Verify that the report's `headSha` equals the submitted commit, its `baseSha` equals the recorded base, and every result retains `requiresIndependentReview` and `requiresMandatoryChecks`. Record fallback responses as effort suggestions only.
+4. Attach the report path and per-command exits to GitHub task #58 and PR #45. Independent review, deterministic CI, production build, READY preview, and authenticated flow evidence must refer to the submitted revision before acceptance.
+
+The CLI rejects dirty candidates, so its output describes committed changes only. Final commit evidence is recorded by the controller outside tracked source; this document does not embed its own commit SHA. The protected-file regression tests run with mocked classifier responses and prove that these paths never invoke the endpoint, even when it would recommend light effort.

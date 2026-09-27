@@ -64,7 +64,12 @@ function result(
 }
 
 function normalizedPath(path: string): string {
-	return path.replaceAll("\\", "/").replace(/^\.\//u, "").toLowerCase();
+	return path
+		.replaceAll("\\", "/")
+		.split("/")
+		.filter((part) => part !== "" && part !== ".")
+		.join("/")
+		.toLowerCase();
 }
 
 function isValidChange(change: unknown): change is ChangeSummary {
@@ -97,6 +102,13 @@ function isProtectedPath(path: string): boolean {
 			"codeowners",
 			"auth.ts",
 			"proxy.ts",
+			"vercel.json",
+			"biome.json",
+			"lefthook.yml",
+			".vercelignore",
+			".gitignore",
+			"skills-lock.json",
+			"bunfig.toml",
 		].includes(file) ||
 		normalized.startsWith(".github/") ||
 		normalized.startsWith(".beads/") ||

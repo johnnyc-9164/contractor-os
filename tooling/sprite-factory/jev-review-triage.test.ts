@@ -91,6 +91,51 @@ describe("classifyChanges", () => {
 		},
 	);
 
+	it.each(
+		[
+			"vercel.json",
+			"biome.json",
+			"lefthook.yml",
+			".vercelignore",
+			".gitignore",
+			"skills-lock.json",
+			"bunfig.toml",
+		].flatMap((file) => [
+			file,
+			`./${file}`,
+			file.toUpperCase(),
+			`apps/web/${file}`,
+			`apps\\web\\${file.toUpperCase()}`,
+			`././${file}`,
+			`apps/web/./${file}`,
+			`.\\apps\\web\\.\\${file.toUpperCase()}`,
+		]),
+	)(
+		"keeps root and nested control files local despite low-effort classifier advice: %s",
+		async (path) => {
+			const fetcher = vi.fn(
+				async (_url: RequestInfo | URL, init?: RequestInit) => {
+					const body = JSON.parse(String(init?.body)) as { inputs: string[] };
+					return successfulResponse(body.inputs);
+				},
+			);
+			const [result] = await classifyChanges(
+				[{ path, status: "modified", additions: 1, deletions: 0 }],
+				fetcher,
+			);
+
+			expect(fetcher).not.toHaveBeenCalled();
+			expect(result).toEqual({
+				path,
+				effort: "deep",
+				source: "deterministic",
+				confidence: null,
+				requiresIndependentReview: true,
+				requiresMandatoryChecks: true,
+			});
+		},
+	);
+
 	it("falls back to standard review when confidence is uncertain", async () => {
 		const fetcher = vi.fn(
 			async () =>
