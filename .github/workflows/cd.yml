@@ -86,6 +86,50 @@ jobs:
           done
           echo "timed out waiting for deployed SHA: observed $observed_sha, expected $GITHUB_SHA"
           exit 1
+      - name: auth routes behave for signed-out visitors
+        run: |
+          base="https://contractoros-ten.vercel.app"
+          # /sign-in must render the Clerk sign-in surface ...
+          for i in $(seq 1 5); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$base/sign-in")
+            if [ "$code" = "200" ]; then
+              echo "GET /sign-in -> 200 (attempt $i)"
+              break
+            fi
+            echo "attempt $i: GET /sign-in -> $code; waiting 20s..."
+            sleep 20
+            if [ "$i" = "5" ]; then
+              echo "FAIL: GET /sign-in never returned 200"
+              exit 1
+            fi
+          done
+          # ... while /sign-up must NOT exist: this is a private admin panel
+          # with no public sign-up surface.
+          code=$(curl -s -o /dev/null -w "%{http_code}" "$base/sign-up")
+          if [ "$code" != "404" ]; then
+            echo "FAIL: GET /sign-up -> $code, expected 404 (no public sign-up surface)"
+            exit 1
+          fi
+          echo "GET /sign-up -> 404 (no public sign-up surface)"
+          # Signed-out page navigation to /dashboard must redirect to the
+          # sign-in route, never 404. (Accept: text/html makes Clerk treat this
+          # as a page request, the same as a real browser navigation.)
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Accept: text/html" "$base/dashboard")
+          location=$(curl -s -o /dev/null -w "%{redirect_url}" -H "Accept: text/html" "$base/dashboard")
+          echo "GET /dashboard -> $code (redirect target: ${location:-<none>})"
+          if [ "$code" = "404" ]; then
+            echo "FAIL: signed-out GET /dashboard returned 404 instead of redirecting to sign-in"
+            exit 1
+          fi
+          case "$location" in
+            */sign-in*)
+              echo "signed-out /dashboard redirects toward /sign-in"
+              ;;
+            *)
+              echo "FAIL: expected a redirect toward /sign-in, got: $code ${location:-<none>}"
+              exit 1
+              ;;
+          esac
 
   deploy-marketing:
     # Independent of the Convex deploy: marketing is a static surface with no backend.

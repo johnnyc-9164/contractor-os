@@ -1,6 +1,7 @@
 "use client";
-import { useAuth } from "@clerk/nextjs";
+import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
 import { api } from "@contractor-os/backend/convex/_generated/api";
+import { Button } from "@contractor-os/ui/components/button";
 import { useQuery } from "convex/react";
 import type { Route } from "next";
 import Link from "next/link";
@@ -32,6 +33,13 @@ export default function Header() {
 					})}
 				</nav>
 				<div className="flex items-center gap-2">
+					{isSignedIn ? (
+						<UserButton />
+					) : (
+						<SignInButton>
+							<Button className="rounded-lg">Sign in</Button>
+						</SignInButton>
+					)}
 					<ModeToggle />
 				</div>
 			</div>
