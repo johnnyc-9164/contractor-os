@@ -20,7 +20,7 @@ import {
 	InputGroupInput,
 } from "@contractor-os/ui/components/input-group";
 import { Skeleton } from "@contractor-os/ui/components/skeleton";
-import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery } from "convex/react";
 import {
 	ArchiveIcon,
 	SearchIcon,
@@ -148,9 +148,11 @@ export function PipelineBoard() {
 		status: leadPaginationStatus,
 		loadMore: loadMoreLeads,
 	} = usePaginatedQuery(api.backend.listLeads, {}, { initialNumItems: 100 });
-	const history = useQuery(api.backend.history, {
-		paginationOpts: { numItems: 100, cursor: null },
-	});
+	const {
+		results: historyEvents,
+		status: historyPaginationStatus,
+		loadMore: loadMoreHistory,
+	} = usePaginatedQuery(api.backend.history, {}, { initialNumItems: 100 });
 	const dispatch = useMutation(api.catalog.dispatch);
 
 	useEffect(() => {
@@ -159,7 +161,16 @@ export function PipelineBoard() {
 		}
 	}, [leadPaginationStatus, loadMoreLeads]);
 
+	useEffect(() => {
+		if (historyPaginationStatus === "CanLoadMore") {
+			loadMoreHistory(100);
+		}
+	}, [historyPaginationStatus, loadMoreHistory]);
+
 	const [columns, setColumns] = useState<LeadColumns | null>(null);
+	const [stageOverrides, setStageOverrides] = useState<
+		Record<string, LeadStage>
+	>({});
 	const [query, setQuery] = useState("");
 	const [showTerminal, setShowTerminal] = useState(false);
 	const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -172,23 +183,54 @@ export function PipelineBoard() {
 
 	const lastHandledBy = useMemo(() => {
 		const map = new Map<string, HistoryEvent>();
-		for (const event of (history?.page ?? []) as HistoryEvent[]) {
+		for (const event of historyEvents as HistoryEvent[]) {
 			const previous = map.get(event.identifier);
 			if (!previous || event.occurredAt > previous.occurredAt) {
 				map.set(event.identifier, event);
 			}
 		}
 		return map;
-	}, [history]);
+	}, [historyEvents]);
+
+	useEffect(() => {
+		if (leadPaginationStatus !== "Exhausted") return;
+
+		setStageOverrides((current) => {
+			let changed = false;
+			const next = { ...current };
+			const liveStages = new Map(
+				(leadRecords as LeadRecord[]).map((record) => [
+					record.id,
+					toLeadStage(record.state),
+				]),
+			);
+
+			for (const [leadId, target] of Object.entries(current)) {
+				const liveStage = liveStages.get(leadId);
+				if (!liveStage || liveStage === target) {
+					delete next[leadId];
+					changed = true;
+				}
+			}
+
+			return changed ? next : current;
+		});
+	}, [leadPaginationStatus, leadRecords]);
 
 	const seeded = useMemo<LeadColumns | null>(() => {
-		if (leadPaginationStatus !== "Exhausted") return null;
+		if (
+			leadPaginationStatus !== "Exhausted" ||
+			historyPaginationStatus !== "Exhausted"
+		) {
+			return null;
+		}
 
 		const nextColumns: LeadColumns = {};
 		for (const stage of BOARD_COLUMNS) nextColumns[stage] = [];
 
 		for (const record of leadRecords as LeadRecord[]) {
-			const stage = toLeadStage(record.state);
+			const liveStage = toLeadStage(record.state);
+			const stage = stageOverrides[record.id] ?? liveStage;
 			if (!stage || TERMINAL_STAGES.includes(stage)) continue;
 
 			nextColumns[stage].push({
@@ -202,16 +244,28 @@ export function PipelineBoard() {
 		}
 
 		return nextColumns;
-	}, [leadPaginationStatus, leadRecords, lastHandledBy]);
+	}, [
+		historyPaginationStatus,
+		leadPaginationStatus,
+		leadRecords,
+		lastHandledBy,
+		stageOverrides,
+	]);
 
 	const activeColumns = columns ?? seeded;
 
 	const terminalLeads = useMemo<PipelineLead[]>(() => {
-		if (leadPaginationStatus !== "Exhausted") return [];
+		if (
+			leadPaginationStatus !== "Exhausted" ||
+			historyPaginationStatus !== "Exhausted"
+		) {
+			return [];
+		}
 
 		const leads: PipelineLead[] = [];
 		for (const record of leadRecords as LeadRecord[]) {
-			const stage = toLeadStage(record.state);
+			const liveStage = toLeadStage(record.state);
+			const stage = stageOverrides[record.id] ?? liveStage;
 			if (!stage || !TERMINAL_STAGES.includes(stage)) continue;
 
 			leads.push({
@@ -224,7 +278,13 @@ export function PipelineBoard() {
 			});
 		}
 		return leads;
-	}, [leadPaginationStatus, leadRecords, lastHandledBy]);
+	}, [
+		historyPaginationStatus,
+		leadPaginationStatus,
+		leadRecords,
+		lastHandledBy,
+		stageOverrides,
+	]);
 
 	const selectedLead = useMemo(
 		() => findLeadById(seeded ?? {}, terminalLeads, selectedLeadId),
@@ -244,6 +304,7 @@ export function PipelineBoard() {
 		contract: string,
 		payload: Record<string, unknown>,
 		rollbackTo: LeadColumns,
+		successMove: { leadId: string; to: LeadStage },
 		successLabel: string,
 	) => {
 		let result: { ok: boolean; blockers?: Array<{ message?: string }> };
@@ -270,6 +331,10 @@ export function PipelineBoard() {
 			return;
 		}
 
+		setStageOverrides((current) => ({
+			...current,
+			[successMove.leadId]: successMove.to,
+		}));
 		setColumns(null);
 		toast.success(successLabel);
 	};
@@ -288,9 +353,12 @@ export function PipelineBoard() {
 			return;
 		}
 
-		if (contract === "lead.award" && !isPrincipal) {
+		if (
+			(contract === "lead.award" || contract === "lead.win") &&
+			!isPrincipal
+		) {
 			toast.error(
-				"Awarding a job requires principal authority. Ask an admin to award this bid.",
+				"Awarding or winning a job requires principal authority. Ask an admin to complete this move.",
 			);
 			return;
 		}
@@ -311,11 +379,13 @@ export function PipelineBoard() {
 		}
 
 		const rollbackTo = activeColumns;
-		setColumns(applyMove(activeColumns, lead.stage, to, lead.id));
+		const optimisticColumns = applyMove(activeColumns, lead.stage, to, lead.id);
+		setColumns(optimisticColumns);
 		void runDispatch(
 			contract,
 			{ lead_id: lead.identifier },
 			rollbackTo,
+			{ leadId: lead.id, to },
 			`Moved to ${to}`,
 		);
 	};
@@ -329,12 +399,8 @@ export function PipelineBoard() {
 		if (!found) return;
 
 		if (from === to) {
-			const next: LeadColumns = { ...activeColumns };
-			const items = [...next[from]];
-			const [moved] = items.splice(found.index, 1);
-			items.splice(event.overIndex, 0, moved);
-			next[from] = items;
-			setColumns(next);
+			// Card order is not persisted, so return to the reactive server order.
+			setColumns(null);
 			return;
 		}
 
@@ -347,10 +413,17 @@ export function PipelineBoard() {
 		const { from, to, leadId } = pendingMove;
 		const contract = pending.contract;
 		const rollbackTo = activeColumns;
-		setColumns(applyMove(activeColumns, from, to, leadId));
+		const optimisticColumns = applyMove(activeColumns, from, to, leadId);
+		setColumns(optimisticColumns);
 		setPending(null);
 		setPendingMove(null);
-		void runDispatch(contract, payload, rollbackTo, `Moved to ${to}`);
+		void runDispatch(
+			contract,
+			payload,
+			rollbackTo,
+			{ leadId, to },
+			`Moved to ${to}`,
+		);
 	};
 
 	const handleDialogCancel = () => {
@@ -419,7 +492,9 @@ export function PipelineBoard() {
 					Open a card for its live record and keyboard-accessible stage actions.
 					Drag cards when search is clear. If a move cannot be completed, the
 					card returns to its previous stage with the reason.
-					{!isPrincipal ? " Awarding requires principal authority." : ""}
+					{!isPrincipal
+						? " Awarding or winning requires principal authority."
+						: ""}
 				</p>
 			</div>
 
