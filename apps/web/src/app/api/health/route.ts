@@ -8,6 +8,7 @@ export async function GET() {
 		process.env.VERCEL_GIT_COMMIT_SHA ??
 		process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ??
 		"unknown";
+	const environment = process.env.VERCEL_ENV ?? "unknown";
 	let convex: "ok" | "error" = "error";
 
 	try {
@@ -21,5 +22,10 @@ export async function GET() {
 		convex = "error";
 	}
 
-	return Response.json({ sha, convex, ts: new Date().toISOString() });
+	return Response.json({
+		sha,
+		environment,
+		convex,
+		ts: new Date().toISOString(),
+	});
 }
