@@ -11,12 +11,19 @@ function declarations(selector: string) {
 	if (!block) {
 		throw new Error(`Missing CSS block: ${selector}`);
 	}
+	const body = block[1];
+	if (!body) {
+		throw new Error(`Missing declarations in CSS block: ${selector}`);
+	}
 
 	return new Map(
-		[...block[1].matchAll(/--([\w-]+):\s*([^;]+);/g)].map((match) => [
-			match[1],
-			match[2].trim(),
-		]),
+		[...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((match) => {
+			const [, name, value] = match;
+			if (!name || !value) {
+				throw new Error(`Invalid declaration in CSS block: ${selector}`);
+			}
+			return [name, value.trim()] as const;
+		}),
 	);
 }
 
