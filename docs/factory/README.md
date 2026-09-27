@@ -1,7 +1,8 @@
 # Contractor OS factory
 
-Symphony is the orchestrator. This directory is the repo-native harness that
-makes a Symphony run reviewable and testable.
+Symphony dispatches approved issues to isolated Sprite workspaces. This
+repository-owned harness makes worker execution observable and fail-closed while
+preserving controller ownership of GitHub and deployment state.
 
 ## Operator commands
 
@@ -14,25 +15,29 @@ node .factory/harness.mjs status --json
 ./.claude/scripts/gates.sh full
 ```
 
-`status --json` answers what each workspace has actually recorded: current phase,
-last action, gate results, branch/SHA, terminal status, and durable evidence. It is
-safe to consume from a local dashboard, a Sprite command, or another agent.
+`status --json` reports recorded phase, last action, gates, base/branch state,
+terminal status, and run evidence. It can be consumed from the Sprite controller
+or a dashboard.
 
-Preview the dispatch/queue labels with `bootstrap-github.sh`; apply them with
-`--apply` only against the intended repository. An issue is dispatchable when it
-has both `symphony` and `factory:ready-to-implement` (or `factory:rework`).
+Preview admission labels with `bootstrap-github.sh`; use `--apply` only for
+the intended repository. An issue is dispatchable only when open with both
+`symphony-ready` and `contract-approved`. Workers never add or remove them.
 
 ## Ownership
 
-| Concern | Source of truth |
-|---|---|
-| Dispatch, retry, isolated workspace | Symphony |
-| Task status and active workpad | GitHub Issue labels/comment |
+| Concern | Owner/source of truth |
+| --- | --- |
+| Admission, dependencies, Sprite, file claims | Controller + GitHub issue/workpad |
+| Dispatch, retry, isolated execution | Symphony + configured Sprite SSH host |
 | Repository policy and stop conditions | `CHARTER.md` |
+| Source orientation | Graft query/status/revision |
 | Per-run current state | `.factory/runtime/<run-id>/state.json` |
-| Immutable run history | `docs/factory/runs/*.json` |
-| Code review and CI | GitHub pull request |
-| Merge and deployment decision | Human |
+| Immutable run evidence | `docs/factory/runs/*.json` |
+| Commit, push, PR, review, CI interpretation | Controller |
+| Merge and deployment | Controller with explicit authority |
+
+Classifier.dev is optional metadata-only cost triage. Deterministic checks and
+independent review remain authoritative.
 
 The PaintPro source archive is product input, not factory infrastructure. Import
-it in a separate scoped change using the installed design/UI skill chain.
+it in a separate scoped change using the committed design/UI skill chain.

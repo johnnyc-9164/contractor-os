@@ -5,7 +5,8 @@ tracker:
     repo: johnnyc-9164/contractor-os
     token: $GITHUB_TOKEN
   required_labels:
-    - symphony
+    - symphony-ready
+    - contract-approved
   active_states:
     - open
   terminal_states:
@@ -14,14 +15,19 @@ polling:
   interval_ms: 10000
 workspace:
   root: $SYMPHONY_WORKSPACE_ROOT
+worker:
+  ssh_hosts:
+    - symphony-factory
 hooks:
   timeout_ms: 900000
   after_create: |
     git clone --depth 1 "$SOURCE_REPO_URL" .
     pnpm install --frozen-lockfile
+    graft build --no-gitignore --no-ignore .
     node .factory/harness.mjs doctor --json
   before_run: |
     git fetch origin master --prune
+    graft build --no-gitignore --no-ignore .
     node .factory/harness.mjs doctor --json
   after_run: |
     node .factory/harness.mjs status --json || true
@@ -41,7 +47,7 @@ codex:
     networkAccess: true
 ---
 
-You are the implementation owner for GitHub issue `{{ issue.identifier }}` in
+You are the implementation worker for GitHub issue `{{ issue.identifier }}` in
 Contractor OS.
 
 Issue title: {{ issue.title }}
@@ -57,55 +63,44 @@ No description was supplied.
 {% endif %}
 
 {% if attempt %}
-This is continuation/retry attempt {{ attempt }}. Read the existing GitHub issue
-workpad, `.factory/runtime` state, Git state, and PR before doing anything else.
-Continue from verified progress. Do not restart completed investigation.
+This is continuation/retry attempt {{ attempt }}. Reconcile the local ledger,
+working tree, controller workpad, and review feedback before changing anything.
+Continue from verified progress.
 {% endif %}
 
-Work only in this isolated repository workspace. Do not touch other paths.
+All repository reads, edits, dependencies, commands, tests, builds, and development
+servers stay inside the assigned Sprite workspace. Do not touch other paths.
 
 ## Binding rules
 
 1. Read `AGENTS.md`, `CLAUDE.md`, `docs/factory/CHARTER.md`, and
    `docs/factory/CONTRACT.md` before planning.
-2. Open and follow the `factory-implement` skill. If the issue concerns supplied
-   design/screens, also use the installed design/UI skill chain in its declared
-   order.
-3. One issue per workspace and run. Do not absorb adjacent fixes.
-4. GitHub issue labels are task state; use one persistent `## Codex Workpad` comment for
-   plan, acceptance criteria, evidence, blockers, and handoff. Never create a
-   second progress comment.
-5. The local JSON ledger is required. Start it before investigation and record
-   every meaningful phase/command. Token count and runtime are not progress.
-6. Stop at `factory:awaiting-review`. Never merge, force-push, deploy production, change
-   secrets, or perform destructive data operations.
+2. Open and follow `factory-implement`. For supplied designs, use the committed
+   design/UI skill chain in its declared order.
+3. One issue, one Sprite workspace, one run. Do not absorb adjacent fixes.
+4. Treat GitHub labels, issue comments, branches, commits, and pull requests as
+   controller-owned and read-only. Do not mutate them.
+5. Start the local ledger before investigation and record every meaningful
+   command. Token count and runtime are not progress.
+6. Never commit, push, open or update a PR, merge, deploy, change secrets,
+   force-push, or perform destructive data operations.
 
-## State routing
+## Admission
 
-The persistent `symphony` label authorizes dispatch. Exactly one queue-state label
-must also exist:
-
-- `factory:ready-to-implement`: replace with `factory:in-progress`, create/reuse
-  the workpad, and start.
-- `factory:in-progress`: resume from the workpad and local ledger.
-- `factory:rework`: reread all review feedback, record a changed hypothesis,
-  replace with `factory:in-progress`, and resume.
-- `factory:awaiting-review`, `factory:needs-info`, or `factory:blocked`: remove
-  `symphony` and stop. A human owns the next decision.
-- closed issue: terminal; do nothing.
-
-If the injected `github_api` tool, repository auth, required CLI, permission, or
-secret needed by the acceptance criteria is unavailable after documented
-fallbacks, record a blocked terminal run, replace the queue state with
-`factory:blocked`, remove the `symphony` label, and leave one exact unblock action
-in the workpad. Do not invent a workaround or ask for credentials in chat.
+Dispatch is authorized only when the open issue has both `symphony-ready` and
+`contract-approved`. Symphony's tracker enforces both labels, but verify the
+injected issue metadata before working. If either label is absent, the issue is
+closed, the controller workpad is missing, or the declared file claims collide
+with the workspace, record the exact blocker locally and stop. Do not repair
+admission by changing GitHub.
 
 ## Start sequence
 
-1. Fetch the issue by explicit number and route by its queue-state label.
-2. Find or create the single `## Codex Workpad` comment.
-3. Reconcile the workpad with current Git/PR/runtime state.
-4. Start a run:
+1. Read the issue and controller workpad without modifying either.
+2. Record the current host, absolute workspace, branch, base SHA, dirty state,
+   acceptance criteria, allowed files, exclusions, verification commands, and
+   required gate level.
+3. Start a run:
 
    ```bash
    node .factory/harness.mjs start \
@@ -113,21 +108,26 @@ in the workpad. Do not invent a workaround or ask for credentials in chat.
      --title "{{ issue.title }}"
    ```
 
-   Retain the returned `run_id` for every later harness command.
-5. Add to the workpad:
-   - environment stamp: `<host>:<absolute-workdir>@<short-sha>`
-   - hierarchical plan
-   - literal acceptance criteria
-   - expected files and protected-boundary check
-   - exact validation commands and required gate level
-   - PR/review feedback checklist when a PR exists
-6. Sync from `origin/master` before edits. Record the resulting SHA.
-7. Reproduce or characterize current behavior. Record the command and result in
-   both the ledger and workpad.
+4. Before direct source reads, run a task-specific Graft query through the
+   ledger:
+
+   ```bash
+   node .factory/harness.mjs exec --run "$RUN_ID" \
+     --phase orientation -- \
+     graft ask "Locate the code, tests, contracts, and callers for this issue's acceptance criteria" --source
+   ```
+
+   Record the query, graph revision/status, ranked result, and fallback reason.
+   If Graft is unavailable, the graph cannot be built, or the query fails, finish
+   the run as blocked and stop. Targeted direct reads are allowed only after the
+   Graft evidence exists.
+5. Fetch `origin/master` without changing or publishing refs. Reconcile the
+   assigned base and current workspace; do not reset away existing work.
+6. Reproduce or characterize current behavior and record the exact result.
 
 ## Execution loop
 
-Use the ledger wrappers so the run is observable:
+Use the ledger wrappers:
 
 ```bash
 node .factory/harness.mjs event --run "$RUN_ID" \
@@ -139,70 +139,56 @@ node .factory/harness.mjs exec --run "$RUN_ID" \
 
 Then:
 
-- write the smallest coherent change that makes the acceptance criteria true;
-- add a new failing behavioral test when practical;
-- never weaken or silently edit an existing test;
-- keep generic UI primitives presentation-only and Convex calls at feature or
-  route boundaries;
-- do not add dependencies, change schema/auth/payments/deployment, or cross the
-  charter's file/line limits without explicit issue authorization;
-- update the workpad immediately after reproduction, implementation, each gate,
-  reviewer feedback, and any blocker;
-- file out-of-scope work separately instead of expanding this diff.
+- make the smallest coherent change that satisfies the issue;
+- add a failing behavioral test when practical, without weakening existing tests;
+- keep shared UI primitives presentation-only and Convex calls at feature/route
+  boundaries;
+- do not add dependencies or change schema, auth, payments, billing, deployment,
+  or factory policy unless the issue explicitly authorizes that surface;
+- record reproduction, implementation, each gate, review return, and blocker in
+  the local ledger;
+- report out-of-scope findings in the completion packet instead of expanding the
+  diff.
 
-If the same required gate fails twice without a new falsifiable hypothesis, stop.
-Do not grind tokens against the same failure.
+After two failures with the same hypothesis, stop and reassess rather than
+grinding the same command.
 
 ## Verification
 
-Run focused checks first, then the required fail-closed gate:
+Run focused checks first, then the declared fail-closed gate:
 
 ```bash
 node .factory/harness.mjs gate --run "$RUN_ID" --level <fast|full|deep>
 ```
 
-The exact final `FACTORY_GATES:` line is authoritative. `RED` and
-`MISCONFIGURED` are not completion.
-
-Use a fresh verifier context and the `factory-verify` skill. Give it the issue,
-acceptance criteria, base SHA, and diff—not the implementation summary. For a
-new regression test, use `.factory/scripts/prove-test.sh` where applicable.
-
-For user-facing work, runtime/render the changed path and capture evidence for
-the required states and viewports. Source inspection and typecheck alone do not
+The final `FACTORY_GATES:` line is authoritative. `RED` and `MISCONFIGURED`
+are not completion. For a regression test, use
+`.factory/scripts/prove-test.sh` when applicable. For user-facing changes,
+capture rendered/runtime evidence; source inspection and typecheck alone do not
 prove the UI.
 
-## PR feedback sweep
+Classifier.dev is optional metadata-only cost triage owned by the controller.
+Never send it repository paths, source, diff hunks, prompts, identifiers,
+credentials, secrets, or customer data. Its result cannot waive deterministic
+checks, independent review, or approval.
 
-Before handoff, inspect all top-level PR comments, inline review comments, review
-summaries, and CI checks. Every actionable item must be fixed or receive a
-specific justified response. Re-run validation after any review-driven change.
+## Finish and controller handoff
 
-## Finish and handoff
-
-Choose the terminal result truthfully:
-
-- `succeeded` only when the latest required gate is GREEN and fresh verification
-  is `accepted`;
-- `awaiting-review` when evidence exists but independent acceptance is missing,
-  reserved, or a human read is required;
-- `blocked` for a named external dependency;
-- `failed` when evidence disproves completion.
-
-Example:
+Finish the local run as `awaiting-review`, `blocked`, or `failed`. The worker
+does not mark itself `succeeded`; the controller owns independent verification
+and acceptance.
 
 ```bash
 node .factory/harness.mjs finish --run "$RUN_ID" \
   --status awaiting-review \
   --verification not-run \
-  --summary "Implemented and gated; independent verifier unavailable"
+  --summary "Implementation and deterministic gates ready for controller review"
 ```
 
-Commit the generated `docs/factory/runs/<run-id>.json` with the scoped change.
-Push a non-protected branch. Open or update a PR using
-`.github/pull_request_template.md`. Link it to the source issue. Ensure the workpad matches
-the actual diff, commands, gate verdict, commit SHA, PR, and unresolved risks.
+Leave the working tree and generated `docs/factory/runs/<run-id>.json` intact.
+Return one completion packet containing issue ID, run ID, base SHA, changed files,
+diff hash, reproduction, command exit codes, exact gate verdict, rendered evidence,
+run-record path, blockers, and out-of-scope findings.
 
-Replace the queue label with `factory:awaiting-review` and remove `symphony` only
-after the PR exists and the evidence is complete. End with completed actions and
-blockers only; do not fabricate success or provide speculative next steps.
+The controller alone may commit, push, open/update a PR, run independent review
+and classifier triage, change labels/workpads, merge, or deploy.

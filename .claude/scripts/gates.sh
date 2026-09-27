@@ -76,27 +76,25 @@ if required audit; then
 fi
 if required architecture; then
   printf '\n=== gate: architecture ===\n'
-  if ! has rg; then
-    skip architecture "rg missing"
+  ARCH_FAIL=0
+  if git grep -n -F 'from "convex/react"' -- packages/ui >/dev/null 2>&1 ||
+     git grep -n -F "from 'convex/react'" -- packages/ui >/dev/null 2>&1; then
+    echo "architecture: packages/ui must remain backend-independent"
+    ARCH_FAIL=1
+  fi
+  CORE_MATCHES="$(git grep -n -F '@johnnyc2026/contractor-os-core' -- apps packages 2>/dev/null || true)"
+  if printf '%s\n' "$CORE_MATCHES" | grep -v '^packages/backend/' | grep -q .; then
+    echo "architecture: contractor-os-core imports belong under packages/backend"
+    ARCH_FAIL=1
+  fi
+  if git ls-files | grep -E '(^|/)\.env($|\.(local|production|preview|development)$)' >/dev/null 2>&1; then
+    echo "architecture: tracked secret-bearing env file detected"
+    ARCH_FAIL=1
+  fi
+  if [ "$ARCH_FAIL" -eq 0 ]; then
+    echo "PASS  architecture"; PASSED=$((PASSED + 1))
   else
-    ARCH_FAIL=0
-    if rg -n "from [\"']convex/react[\"']" packages/ui >/dev/null 2>&1; then
-      echo "architecture: packages/ui must remain backend-independent"
-      ARCH_FAIL=1
-    fi
-    if rg -n '@johnnyc2026/contractor-os-core' apps packages --glob '!packages/backend/**' >/dev/null 2>&1; then
-      echo "architecture: contractor-os-core imports belong under packages/backend"
-      ARCH_FAIL=1
-    fi
-    if git ls-files | rg '(^|/)\.env($|\.(local|production|preview|development)$)' >/dev/null 2>&1; then
-      echo "architecture: tracked secret-bearing env file detected"
-      ARCH_FAIL=1
-    fi
-    if [ "$ARCH_FAIL" -eq 0 ]; then
-      echo "PASS  architecture"; PASSED=$((PASSED + 1))
-    else
-      echo "FAIL  architecture"; FAILED=$((FAILED + 1)); FAILING="${FAILING}${FAILING:+,}architecture"
-    fi
+    echo "FAIL  architecture"; FAILED=$((FAILED + 1)); FAILING="${FAILING}${FAILING:+,}architecture"
   fi
 fi
 

@@ -115,12 +115,25 @@ test("success fails closed without green gates and independent acceptance", () =
 
 test("doctor reports file and command checks without exposing values", () => {
 	const root = repository();
-	const result = doctor({ root });
+	const result = doctor({ root, isCommandAvailable: () => true });
 	assert.equal(result.status, "pass");
 	assert.equal(result.environment.length, 3);
 	assert.ok(
 		result.environment.every(
 			(entry) => Object.keys(entry).sort().join(",") === "key,present",
 		),
+	);
+});
+
+test("doctor fails closed for a missing hard prerequisite", () => {
+	const root = repository();
+	const result = doctor({
+		root,
+		isCommandAvailable: (command) => command !== "graft",
+	});
+	assert.equal(result.status, "fail");
+	assert.deepEqual(
+		result.checks.find((check) => check.check === "command:graft"),
+		{ check: "command:graft", status: "fail" },
 	);
 });

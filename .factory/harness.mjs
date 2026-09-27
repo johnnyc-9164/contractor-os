@@ -373,7 +373,18 @@ export function getStatus({ root = resolveRoot(), runId } = {}) {
 	};
 }
 
-export function doctor({ root = resolveRoot() } = {}) {
+function commandAvailable(root, command) {
+	return (
+		spawnSync("sh", ["-c", 'command -v "$1"', "factory-doctor", command], {
+			cwd: root,
+		}).status === 0
+	);
+}
+
+export function doctor({
+	root = resolveRoot(),
+	isCommandAvailable = (command) => commandAvailable(root, command),
+} = {}) {
 	const requiredFiles = [
 		"AGENTS.md",
 		"CLAUDE.md",
@@ -383,7 +394,7 @@ export function doctor({ root = resolveRoot() } = {}) {
 		".factory/gates.conf",
 		".claude/scripts/gates.sh",
 	];
-	const commands = ["git", "node", "pnpm", "rg"];
+	const commands = ["git", "node", "pnpm", "graft"];
 	const checks = [
 		...requiredFiles.map((path) => ({
 			check: `file:${path}`,
@@ -391,11 +402,7 @@ export function doctor({ root = resolveRoot() } = {}) {
 		})),
 		...commands.map((command) => ({
 			check: `command:${command}`,
-			status:
-				spawnSync("sh", ["-lc", `command -v ${command}`], { cwd: root })
-					.status === 0
-					? "pass"
-					: "fail",
+			status: isCommandAvailable(command) ? "pass" : "fail",
 		})),
 	];
 	const environment = [
