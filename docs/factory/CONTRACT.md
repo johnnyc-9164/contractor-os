@@ -86,17 +86,20 @@ controller-owned checkout pinned to the approved trusted factory SHA and a token
 limited to issue-label access. It runs that checkout's
 `.factory/scripts/bootstrap-github.sh --handoff <issue>` to remove
 `symphony-ready` and verify redispatch is disabled. It never executes the
-worker-workspace copy before review. The controller then creates a non-protected
-feature branch and commits the complete candidate. It runs the trusted checkout's
-harness with `FACTORY_ROOT` pointed at the clean worker workspace, finalizes and
+worker-workspace copy before review. The controller creates a fresh
+controller-owned clone from the approved base, applies the accepted source
+change as data on a non-protected feature branch, and commits the candidate
+there. It rejects symlinks and invalid/oversized ledger data, then copies only
+the run's `state.json` and `events.jsonl` into that clone's ignored runtime
+directory. The trusted checkout's harness finalizes with `FACTORY_ROOT` pointed
+at the fresh candidate clone, never the worker repository. The controller
 separately commits the immutable record, runs fresh independent review and
 exact-SHA checks, opens/updates the PR, triages every review thread, and performs
 only explicitly authorized merges or deploys. Finalization rejects `main`,
 `master`, detached `HEAD`, dirty workspaces, and mismatched candidate SHAs.
-Every Git read used by the trusted harness overrides repository-local hooks and
-file-system monitors, ignores global/system configuration, and disables external
-diff and text-conversion commands so worker-controlled Git metadata cannot run in
-the controller context.
+Every Git read used by the trusted harness also overrides repository-local hooks
+and file-system monitors, ignores global/system configuration, and disables
+external diff and text-conversion commands as defense in depth.
 
 ## Failure and retry
 

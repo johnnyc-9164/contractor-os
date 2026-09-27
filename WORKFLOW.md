@@ -213,23 +213,29 @@ The trusted command idempotently removes `symphony-ready` and verifies the issue
 is no longer dispatchable before review, retry, or cleanup continues. Do not run
 the relative copy from the worker's uncommitted tree.
 
-For a review candidate, the controller creates and checks out a non-protected
-feature branch, then commits the complete source change without a durable run
-record. Use the same trusted harness, pointed at the clean worker workspace, to
-finalize; do not execute the worker's harness copy. The trusted harness disables
-repository-local hooks and file-system monitors, ignores global/system Git
-configuration, and forbids external diff/text-conversion commands for its
-working-tree checks:
+For a review candidate, the controller creates a fresh controller-owned clone
+from the approved base, checks out a non-protected feature branch there, applies
+the accepted source change as data, and commits it without a durable run record.
+Never run controller Git or the trusted harness against the worker repository.
+Reject symlinks and schema-invalid/oversized ledger files, then copy only that
+run's `state.json` and `events.jsonl` into the fresh clone's ignored runtime
+directory. Use the trusted harness against the fresh candidate clone:
 
 ```bash
-FACTORY_ROOT="$WORKER_WORKSPACE" \
+test ! -L "$WORKER_WORKSPACE/.factory/runtime/$RUN_ID/state.json"
+test ! -L "$WORKER_WORKSPACE/.factory/runtime/$RUN_ID/events.jsonl"
+# After bounded JSON/JSONL validation, copy those two data files without links.
+FACTORY_ROOT="$CONTROLLER_CANDIDATE_ROOT" \
   node "$CONTROLLER_FACTORY_ROOT/.factory/harness.mjs" finalize \
   --run "$RUN_ID" \
-  --candidate-sha "$(git -C "$WORKER_WORKSPACE" rev-parse HEAD)"
+  --candidate-sha "$(git -C "$CONTROLLER_CANDIDATE_ROOT" rev-parse HEAD)"
 ```
 
-Commit the generated immutable record separately, then run independent review,
-CI, and required previews against the final PR head. Never finalize a dirty tree
-or a SHA other than the checked-out candidate. Finalization rejects `main`,
-`master`, a detached `HEAD`, and any dirty workspace. Do not replace these
-hardening flags with worker-repository configuration or hooks.
+The trusted harness additionally disables repository-local hooks and file-system
+monitors, ignores global/system Git configuration, and forbids external diff and
+text-conversion commands. Commit the generated immutable record separately, then
+run independent review, CI, and required previews against the final PR head.
+Never finalize a dirty tree or a SHA other than the checked-out candidate.
+Finalization rejects `main`, `master`, a detached `HEAD`, and any dirty
+workspace. Do not replace the fresh-clone boundary or hardening flags with
+worker-repository configuration or hooks.
