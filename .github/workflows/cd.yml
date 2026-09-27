@@ -1,23 +1,41 @@
-name: cd
+name: preview-verification
 
-# Continuous deployment: master -> Convex production -> Vercel production.
-# Triggered only by pushes to master (i.e. after CI passed and code merged).
-# Serialized with concurrency so production deploys never overlap.
-
+# This workflow certifies an existing Vercel Preview. It never creates a
+# deployment and cannot target Production.
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment target
+        required: true
+        type: choice
+        options:
+          - preview
+      preview_url:
+        description: Exact Vercel Preview URL to verify
+        required: true
+        type: string
+      expected_sha:
+        description: Full commit SHA the Preview must report
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 concurrency:
-  group: production
-  cancel-in-progress: false
+  group: preview-verification-${{ inputs.expected_sha }}
+  cancel-in-progress: true
 
 jobs:
-  deploy-convex:
+  verify-preview:
+    name: verify exact Preview SHA and Convex health
     runs-on: ubuntu-latest
     env:
-      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+      PREVIEW_TARGET: ${{ inputs.target }}
+      PREVIEW_URL: ${{ inputs.preview_url }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,155 +50,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: deploy backend to Convex production
-        if: ${{ env.CONVEX_DEPLOY_KEY != '' }}
-        working-directory: packages/backend
-        run: npx convex deploy
-
-  deploy-vercel:
-    runs-on: ubuntu-latest
-    needs: [deploy-convex]
-    env:
-      VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
-    steps:
-      # Deploy hook bypasses the Hobby "commit author" block: the deploy is
-      # triggered by CI, not by a collaborator push.
-      - name: trigger Vercel production deploy
-        if: ${{ env.VERCEL_DEPLOY_HOOK_URL != '' }}
-        run: curl -sf -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
-
-  smoke:
-    runs-on: ubuntu-latest
-    needs: [deploy-vercel]
-    steps:
-      - name: production health check (poll until live)
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sf https://contractoros-ten.vercel.app/ > /dev/null; then
-              echo "production homepage reachable (attempt $i)"
-              exit 0
-            fi
-            echo "attempt $i: not live yet, waiting 20s..."
-            sleep 20
-          done
-          echo "production homepage never became reachable"
-          exit 1
-      - name: verify deployed commit and Convex health
-        run: |
-          observed_sha="<unreachable>"
-          for i in $(seq 1 30); do
-            if response=$(curl -sf https://contractoros-ten.vercel.app/api/health); then
-              observed_sha=$(jq -r '.sha // "<missing>"' <<< "$response")
-              if [ "$observed_sha" = "$GITHUB_SHA" ]; then
-                convex=$(jq -r '.convex // "<missing>"' <<< "$response")
-                if [ "$convex" != "ok" ]; then
-                  echo "deployed commit $GITHUB_SHA is live, but Convex health is $convex"
-                  exit 1
-                fi
-                echo "deployed commit $GITHUB_SHA is live and Convex is healthy (attempt $i)"
-                exit 0
-              fi
-            fi
-            echo "attempt $i: observed SHA $observed_sha, expected $GITHUB_SHA; waiting 20s..."
-            sleep 20
-          done
-          echo "timed out waiting for deployed SHA: observed $observed_sha, expected $GITHUB_SHA"
-          exit 1
-      - name: auth routes behave for signed-out visitors
-        run: |
-          base="https://contractoros-ten.vercel.app"
-          # /sign-in must render the Clerk sign-in surface ...
-          for i in $(seq 1 5); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" "$base/sign-in")
-            if [ "$code" = "200" ]; then
-              echo "GET /sign-in -> 200 (attempt $i)"
-              break
-            fi
-            echo "attempt $i: GET /sign-in -> $code; waiting 20s..."
-            sleep 20
-            if [ "$i" = "5" ]; then
-              echo "FAIL: GET /sign-in never returned 200"
-              exit 1
-            fi
-          done
-          # ... while /sign-up must NOT exist: this is a private admin panel
-          # with no public sign-up surface.
-          code=$(curl -s -o /dev/null -w "%{http_code}" "$base/sign-up")
-          if [ "$code" != "404" ]; then
-            echo "FAIL: GET /sign-up -> $code, expected 404 (no public sign-up surface)"
-            exit 1
-          fi
-          echo "GET /sign-up -> 404 (no public sign-up surface)"
-          # Signed-out page navigation to /dashboard must redirect to the
-          # sign-in route, never 404. (Accept: text/html makes Clerk treat this
-          # as a page request, the same as a real browser navigation.)
-          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Accept: text/html" "$base/dashboard")
-          location=$(curl -s -o /dev/null -w "%{redirect_url}" -H "Accept: text/html" "$base/dashboard")
-          echo "GET /dashboard -> $code (redirect target: ${location:-<none>})"
-          if [ "$code" = "404" ]; then
-            echo "FAIL: signed-out GET /dashboard returned 404 instead of redirecting to sign-in"
-            exit 1
-          fi
-          case "$location" in
-            */sign-in*)
-              echo "signed-out /dashboard redirects toward /sign-in"
-              ;;
-            *)
-              echo "FAIL: expected a redirect toward /sign-in, got: $code ${location:-<none>}"
-              exit 1
-              ;;
-          esac
-
-  deploy-marketing:
-    # Independent of the Convex deploy: marketing is a static surface with no backend.
-    # Vercel project `contractor-os-marketing` exists (root: apps/marketing, default
-    # *.vercel.app domain, no custom domain per MASTER_BRIEF S58; SSO protection off;
-    # public env NEXT_PUBLIC_APP_URL=https://contractoros-ten.vercel.app).
-    # PENDING: git connection — the ItsHim Vercel team's GitHub integration cannot see
-    # johnnyc-9164/contractor-os (repo_not_found), so no deploy hook exists yet.
-    # Unblock: install/authorize the Vercel GitHub App on the johnnyc-9164 GitHub
-    # account (Johnny's browser action), then connect the repo and create the deploy
-    # hook; set repo secret VERCEL_MARKETING_DEPLOY_HOOK_URL + repo variable
-    # MARKETING_URL. Until then this job no-ops.
-    runs-on: ubuntu-latest
-    env:
-      VERCEL_MARKETING_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_MARKETING_DEPLOY_HOOK_URL }}
-    steps:
-      - name: trigger Vercel marketing deploy
-        if: ${{ env.VERCEL_MARKETING_DEPLOY_HOOK_URL != '' }}
-        run: curl -sf -X POST "${{ secrets.VERCEL_MARKETING_DEPLOY_HOOK_URL }}"
-
-  smoke-marketing:
-    runs-on: ubuntu-latest
-    needs: [deploy-marketing]
-    env:
-      MARKETING_URL: ${{ vars.MARKETING_URL }}
-      NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
-    steps:
-      - name: marketing homepage reachable and free of auth JS
-        if: ${{ env.MARKETING_URL != '' }}
-        run: |
-          for i in $(seq 1 30); do
-            if html=$(curl -sf "${{ vars.MARKETING_URL }}/"); then
-              echo "marketing homepage reachable (attempt $i)"
-              if grep -qiE "clerk|convex" <<< "$html"; then
-                echo "FAIL: clerk/convex references found in marketing homepage"
-                exit 1
-              fi
-              echo "no clerk/convex references in marketing homepage"
-              exit 0
-            fi
-            echo "attempt $i: not live yet, waiting 20s..."
-            sleep 20
-          done
-          echo "marketing homepage never became reachable"
-          exit 1
-      - name: app CTAs resolve (when configured)
-        if: ${{ vars.MARKETING_URL != '' && vars.NEXT_PUBLIC_APP_URL != '' }}
-        run: |
-          html=$(curl -sf "${{ vars.MARKETING_URL }}/")
-          if ! grep -qF "${{ vars.NEXT_PUBLIC_APP_URL }}" <<< "$html"; then
-            echo "FAIL: NEXT_PUBLIC_APP_URL not found in marketing homepage links"
-            exit 1
-          fi
-          echo "app URL present in marketing CTAs"
+      - name: verify requested commit is live on Preview
+        run: >-
+          pnpm exec tsx tooling/sprite-factory/preview-deployment.ts
+          --target "$PREVIEW_TARGET"
+          --preview-url "$PREVIEW_URL"
+          --expected-sha "$EXPECTED_SHA"
