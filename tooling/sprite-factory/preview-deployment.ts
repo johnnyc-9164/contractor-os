@@ -22,6 +22,8 @@ type HealthPayload = {
 };
 
 const PRODUCTION_ORIGINS = new Set(["https://contractoros-ten.vercel.app"]);
+const PREVIEW_HOST_PATTERN =
+	/^contractoros-[a-z0-9-]+-johnnyc\.vercel\.app$/u;
 
 function required(value: string | undefined, name: string): string {
 	const normalized = value?.trim();
@@ -45,6 +47,11 @@ function previewOrigin(value: string): string {
 	}
 	if (PRODUCTION_ORIGINS.has(url.origin)) {
 		throw new Error(`Production URL is not allowed: ${url.origin}`);
+	}
+	if (!PREVIEW_HOST_PATTERN.test(url.hostname)) {
+		throw new Error(
+			`Preview URL must use a Contractor OS Vercel Preview host; received ${url.hostname}`,
+		);
 	}
 
 	return url.origin;
@@ -82,7 +89,11 @@ export async function verifyPreviewDeployment(
 
 	let payload: HealthPayload;
 	try {
-		payload = (await response.json()) as HealthPayload;
+		const value: unknown = await response.json();
+		if (!value || typeof value !== "object") {
+			throw new Error("invalid payload");
+		}
+		payload = value as HealthPayload;
 	} catch {
 		throw new Error("Preview health response is not valid JSON");
 	}
