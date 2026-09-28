@@ -77,12 +77,14 @@ observed SHA equals `GITHUB_SHA` and Convex reports healthy).
 - `packages/backend/convex/cms.ts` — authenticated CMS facade. `requireTenant`
   resolves an enabled membership from the caller's token identity, and
   `requireSiteTenant` checks the site's tenant mapping before reads/updates.
-  `cms.isolation.test.ts` exercises same-tenant access, cross-tenant rejection
-  and list filtering, and unauthenticated rejection in `convex-test`; this is
-  mocked/unit evidence, not proof of production configuration or behavior.
+  `cms.isolation.test.ts` exercises same-tenant access, cross-tenant rejection,
+  tenant-scoped list pagination, and unauthenticated rejection in
+  `convex-test`; this is mocked/unit evidence, not proof of production
+  configuration or behavior.
+  `listSites` paginates tenant-indexed site mappings before resolving each
+  component site, so pages and cursors are scoped to the caller's tenant.
   The facade is not fully resolved: `createSite` invokes component creation
-  before validating an existing ownership mapping (GH-59), and `listSites`
-  filters a component-wide result after pagination (GH-64).
+  before validating an existing ownership mapping (GH-59).
 - Production: `https://contractoros-ten.vercel.app`, Convex `posh-cobra-868`
 
 ## Conventions (facts, not philosophy)

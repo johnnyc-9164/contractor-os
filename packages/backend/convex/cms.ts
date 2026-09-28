@@ -109,14 +109,18 @@ export const listSites = query({
 		const mappings = await ctx.db
 			.query("cmsSiteTenants")
 			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
-			.collect();
-		const identifiers = new Set(mappings.map((row) => row.siteIdentifier));
-		const result = await cms.site.list(ctx, args);
-		// Filtering happens after component pagination, so a page may contain fewer
-		// than numItems and callers may need to continue to find more tenant sites.
+			.paginate(args.paginationOpts);
+		const page = await Promise.all(
+			mappings.page.map(async ({ siteIdentifier }) => {
+				const site = await cms.site.get(ctx, { identifier: siteIdentifier });
+				if (!site) throw new Error("mapped CMS site is missing");
+				return site;
+			}),
+		);
 		return {
-			...result,
-			page: result.page.filter((site) => identifiers.has(site.identifier)),
+			page,
+			isDone: mappings.isDone,
+			continueCursor: mappings.continueCursor,
 		};
 	},
 });
