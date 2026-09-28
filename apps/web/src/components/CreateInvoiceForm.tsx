@@ -3,6 +3,7 @@
 import { api } from "@contractor-os/backend/convex/_generated/api";
 import { useMutation } from "convex/react";
 import { useState } from "react";
+import { submitInvoiceDraft } from "./invoice-submission";
 
 export function CreateInvoiceForm({ onCreated }: { onCreated?: () => void }) {
 	const createInvoice = useMutation(api.backend.co_create_invoice);
@@ -11,46 +12,42 @@ export function CreateInvoiceForm({ onCreated }: { onCreated?: () => void }) {
 	const [invoiceNumber, setInvoiceNumber] = useState("");
 	const [invoiceType, setInvoiceType] = useState("");
 	const [amount, setAmount] = useState("");
+	const [dueDate, setDueDate] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [amountError, setAmountError] = useState<string | null>(null);
+	const [dueDateError, setDueDateError] = useState<string | null>(null);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (
-			!job.trim() ||
-			!client.trim() ||
-			!invoiceNumber.trim() ||
-			!invoiceType.trim() ||
-			!amount.trim()
-		) {
-			setError(
-				"Job, Client, Invoice Number, Invoice Type, and Amount are required.",
-			);
-			return;
-		}
-		const amountNum = Number.parseFloat(amount);
-		if (isNaN(amountNum) || amountNum <= 0) {
-			setError("Amount must be a positive number.");
-			return;
-		}
 		setSubmitting(true);
 		setError(null);
+		setAmountError(null);
+		setDueDateError(null);
 		try {
-			await createInvoice({
-				requestKey: `invoice-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-				input: {
-					job: job.trim(),
-					client: client.trim(),
-					invoice_number: invoiceNumber.trim(),
-					invoice_type: invoiceType.trim(),
-					amount: amountNum,
+			const result = await submitInvoiceDraft(
+				{
+					job,
+					client,
+					invoiceNumber,
+					invoiceType,
+					amount,
+					dueDate,
 				},
-			});
+				createInvoice,
+			);
+			if (!result.ok) {
+				if (result.field === "amount") setAmountError(result.error);
+				else if (result.field === "dueDate") setDueDateError(result.error);
+				else setError(result.error);
+				return;
+			}
 			setJob("");
 			setClient("");
 			setInvoiceNumber("");
 			setInvoiceType("");
 			setAmount("");
+			setDueDate("");
 			onCreated?.();
 		} catch (err) {
 			setError(
@@ -105,16 +102,53 @@ export function CreateInvoiceForm({ onCreated }: { onCreated?: () => void }) {
 				disabled={submitting}
 				style={inputStyle}
 			/>
+			<label htmlFor="invoice-due-date">Due date (required)</label>
 			<input
-				type="number"
-				placeholder="Amount (required)"
-				value={amount}
-				onChange={(e) => setAmount(e.target.value)}
+				id="invoice-due-date"
+				type="date"
+				value={dueDate}
+				onChange={(e) => {
+					setDueDate(e.target.value);
+					setDueDateError(null);
+				}}
+				required
 				disabled={submitting}
 				style={inputStyle}
-				min="0"
-				step="0.01"
+				aria-invalid={dueDateError ? true : undefined}
+				aria-describedby={dueDateError ? "invoice-due-date-error" : undefined}
 			/>
+			{dueDateError && (
+				<p
+					id="invoice-due-date-error"
+					role="alert"
+					style={{ color: "red", fontSize: "0.875rem" }}
+				>
+					{dueDateError}
+				</p>
+			)}
+			<input
+				type="text"
+				inputMode="decimal"
+				placeholder="Amount (required)"
+				value={amount}
+				onChange={(e) => {
+					setAmount(e.target.value);
+					setAmountError(null);
+				}}
+				disabled={submitting}
+				style={inputStyle}
+				aria-invalid={amountError ? true : undefined}
+				aria-describedby={amountError ? "invoice-amount-error" : undefined}
+			/>
+			{amountError && (
+				<p
+					id="invoice-amount-error"
+					role="alert"
+					style={{ color: "red", fontSize: "0.875rem" }}
+				>
+					{amountError}
+				</p>
+			)}
 			{error && (
 				<div style={{ color: "red", fontSize: "0.875rem" }}>{error}</div>
 			)}
