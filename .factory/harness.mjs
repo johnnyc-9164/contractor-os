@@ -454,15 +454,35 @@ export function finishRun({
 	};
 }
 
-export function finalizeRun({ root = resolveRoot(), runId, candidateSha }) {
+export function finalizeRun({
+	root = resolveRoot(),
+	runId,
+	candidateSha,
+	approvedBaseSha,
+	requiredGateLevel,
+}) {
 	const completed = readState(root, runId);
 	if (completed.status === "running") fail(`run is not terminal: ${runId}`);
+	if (!new Set(["fast", "full", "deep"]).has(requiredGateLevel)) {
+		fail("controller-approved gate level must be fast, full, or deep");
+	}
+	if (approvedBaseSha !== completed.base_sha) {
+		fail("worker base SHA does not match the controller-approved base SHA");
+	}
 	if (
 		["awaiting-review", "succeeded"].includes(completed.status) &&
 		(completed.gates.at(-1)?.status !== "GREEN" ||
 			completed.gates.at(-1)?.exit_code !== 0)
 	) {
 		fail("a review candidate requires a recorded GREEN gate with exit code 0");
+	}
+	if (
+		["awaiting-review", "succeeded"].includes(completed.status) &&
+		completed.gates.at(-1)?.level !== requiredGateLevel
+	) {
+		fail(
+			`review candidate gate must match required level: ${requiredGateLevel}`,
+		);
 	}
 	const currentHead = gitRequired(
 		root,
@@ -487,7 +507,7 @@ export function finalizeRun({ root = resolveRoot(), runId, candidateSha }) {
 	}
 	const candidateFiles = candidateChangedFiles(
 		root,
-		completed.base_sha,
+		approvedBaseSha,
 		candidateSha,
 	);
 	const recordsDirectory = durableDirectory(root);
@@ -503,6 +523,8 @@ export function finalizeRun({ root = resolveRoot(), runId, candidateSha }) {
 		branch: candidateBranch,
 		head_sha: candidateSha,
 		candidate_sha: candidateSha,
+		approved_base_sha: approvedBaseSha,
+		required_gate_level: requiredGateLevel,
 		changed_files: candidateFiles,
 		finalized_at: now(),
 		events: readEvents(root, runId),
@@ -651,6 +673,8 @@ export async function main(argv = process.argv.slice(2)) {
 				root,
 				runId: options.run,
 				candidateSha: options["candidate-sha"],
+				approvedBaseSha: options["approved-base-sha"],
+				requiredGateLevel: options["required-gate-level"],
 			});
 			process.stdout.write(`${JSON.stringify(record)}\n`);
 			return 0;

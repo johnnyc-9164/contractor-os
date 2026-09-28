@@ -62,6 +62,22 @@ function repository() {
 	return root;
 }
 
+function finalizeCandidate({
+	root,
+	state,
+	candidateSha,
+	approvedBaseSha = state.base_sha,
+	requiredGateLevel = "full",
+}) {
+	return finalizeRun({
+		root,
+		runId: state.run_id,
+		candidateSha,
+		approvedBaseSha,
+		requiredGateLevel,
+	});
+}
+
 test("run lifecycle produces observable and durable evidence", () => {
 	const root = repository();
 	execFileSync("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], {
@@ -119,9 +135,9 @@ test("run lifecycle produces observable and durable evidence", () => {
 		cwd: root,
 		encoding: "utf8",
 	}).trim();
-	const finalized = finalizeRun({
+	const finalized = finalizeCandidate({
 		root,
-		runId: state.run_id,
+		state,
 		candidateSha,
 	});
 	assert.equal(finalized.candidate_sha, candidateSha);
@@ -134,18 +150,20 @@ test("run lifecycle produces observable and durable evidence", () => {
 	assert.equal(durable.branch, "candidate");
 	assert.equal(durable.head_sha, candidateSha);
 	assert.notEqual(durable.worker_head_sha, candidateSha);
+	assert.equal(durable.approved_base_sha, state.base_sha);
+	assert.equal(durable.required_gate_level, "full");
 	assert.equal(getStatus({ root }).runs[0].status, "awaiting-review");
 });
 
 test("controller finalization rejects a dirty or mismatched candidate", () => {
 	const root = repository();
-	startRun({ root, task: "COS-78", runId: "run-COS-78" });
+	const state = startRun({ root, task: "COS-78", runId: "run-COS-78" });
 	finishRun({ root, runId: "run-COS-78", status: "blocked" });
 	assert.throws(
 		() =>
-			finalizeRun({
+			finalizeCandidate({
 				root,
-				runId: "run-COS-78",
+				state,
 				candidateSha: "not-current-head",
 			}),
 		/candidate SHA must equal/,
@@ -156,21 +174,21 @@ test("controller finalization rejects a dirty or mismatched candidate", () => {
 		encoding: "utf8",
 	}).trim();
 	assert.throws(
-		() => finalizeRun({ root, runId: "run-COS-78", candidateSha }),
+		() => finalizeCandidate({ root, state, candidateSha }),
 		/candidate working tree is not clean/,
 	);
 });
 
 test("controller finalization rejects protected branch candidates", () => {
 	const root = repository();
-	startRun({ root, task: "COS-79", runId: "run-COS-79" });
+	const state = startRun({ root, task: "COS-79", runId: "run-COS-79" });
 	finishRun({ root, runId: "run-COS-79", status: "blocked" });
 	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
 		cwd: root,
 		encoding: "utf8",
 	}).trim();
 	assert.throws(
-		() => finalizeRun({ root, runId: "run-COS-79", candidateSha }),
+		() => finalizeCandidate({ root, state, candidateSha }),
 		/candidate branch is protected: master/,
 	);
 });
@@ -185,7 +203,7 @@ test("controller finalization rejects review candidates without a green gate", (
 		encoding: "utf8",
 	}).trim();
 	assert.throws(
-		() => finalizeRun({ root, runId: state.run_id, candidateSha }),
+		() => finalizeCandidate({ root, state, candidateSha }),
 		/a review candidate requires a recorded GREEN gate with exit code 0/,
 	);
 });
@@ -204,8 +222,52 @@ test("controller finalization rejects a green verdict with a nonzero exit", () =
 		encoding: "utf8",
 	}).trim();
 	assert.throws(
-		() => finalizeRun({ root, runId: state.run_id, candidateSha }),
+		() => finalizeCandidate({ root, state, candidateSha }),
 		/a review candidate requires a recorded GREEN gate with exit code 0/,
+	);
+});
+
+test("controller finalization enforces the controller-approved gate level", () => {
+	const root = repository();
+	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
+	const state = startRun({ root, task: "COS-80C", runId: "run-COS-80C" });
+	const statePath = join(root, ".factory/runtime/run-COS-80C/state.json");
+	const current = JSON.parse(readFileSync(statePath, "utf8"));
+	current.gates.push({ status: "GREEN", exit_code: 0, level: "fast" });
+	writeFileSync(statePath, `${JSON.stringify(current, null, 2)}\n`, "utf8");
+	finishRun({ root, runId: state.run_id, status: "awaiting-review" });
+	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	}).trim();
+	assert.throws(
+		() =>
+			finalizeCandidate({
+				root,
+				state,
+				candidateSha,
+				requiredGateLevel: "deep",
+			}),
+		/review candidate gate must match required level: deep/,
+	);
+});
+
+test("controller finalization rejects a worker-tampered base SHA", () => {
+	const root = repository();
+	const state = startRun({ root, task: "COS-80D", runId: "run-COS-80D" });
+	finishRun({ root, runId: state.run_id, status: "blocked" });
+	execFileSync("git", ["switch", "-qc", "candidate"], { cwd: root });
+	const statePath = join(root, ".factory/runtime/run-COS-80D/state.json");
+	const tampered = JSON.parse(readFileSync(statePath, "utf8"));
+	tampered.base_sha = "a".repeat(40);
+	writeFileSync(statePath, `${JSON.stringify(tampered, null, 2)}\n`, "utf8");
+	const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+	}).trim();
+	assert.throws(
+		() => finalizeCandidate({ root, state, candidateSha }),
+		/worker base SHA does not match the controller-approved base SHA/,
 	);
 });
 
@@ -224,7 +286,7 @@ test("controller finalization includes tracked runtime metadata in dirty checks"
 		encoding: "utf8",
 	}).trim();
 	assert.throws(
-		() => finalizeRun({ root, runId: state.run_id, candidateSha }),
+		() => finalizeCandidate({ root, state, candidateSha }),
 		/candidate working tree is not clean: \.factory\/runtime\/\.gitignore/,
 	);
 });
@@ -249,7 +311,7 @@ test("controller finalization disables worker repository Git hooks", () => {
 	const previousMarker = process.env.FACTORY_PROBE_MARKER;
 	process.env.FACTORY_PROBE_MARKER = marker;
 	try {
-		finalizeRun({ root, runId: state.run_id, candidateSha });
+		finalizeCandidate({ root, state, candidateSha });
 	} finally {
 		if (previousMarker === undefined) delete process.env.FACTORY_PROBE_MARKER;
 		else process.env.FACTORY_PROBE_MARKER = previousMarker;
@@ -265,8 +327,7 @@ test("controller finalization fails closed when Git cleanliness probes error", (
 	writeFileSync(join(root, "tracked.txt"), "changed\n", "utf8");
 	writeFileSync(join(root, ".git/index"), "not a git index\n", "utf8");
 	assert.throws(
-		() =>
-			finalizeRun({ root, runId: state.run_id, candidateSha: state.base_sha }),
+		() => finalizeCandidate({ root, state, candidateSha: state.base_sha }),
 		/unable to inspect unstaged candidate changes: Git command failed/,
 	);
 });
@@ -288,7 +349,7 @@ test("controller finalization rejects symlinks in the durable record path", () =
 		encoding: "utf8",
 	}).trim();
 	assert.throws(
-		() => finalizeRun({ root, runId: state.run_id, candidateSha }),
+		() => finalizeCandidate({ root, state, candidateSha }),
 		/durable record path is not a real directory/,
 	);
 	assert.equal(existsSync(join(external, "run-COS-84.json")), false);
@@ -308,7 +369,7 @@ test("durable evidence recomputes candidate changed files from the approved base
 		cwd: root,
 		encoding: "utf8",
 	}).trim();
-	const finalized = finalizeRun({ root, runId: state.run_id, candidateSha });
+	const finalized = finalizeCandidate({ root, state, candidateSha });
 	assert.deepEqual(finalized.worker_changed_files, ["tracked.txt"]);
 	assert.deepEqual(finalized.changed_files, ["candidate.txt"]);
 });
@@ -398,4 +459,48 @@ exit 0
 			return true;
 		},
 	);
+});
+
+test("architecture gates report Git probe errors as misconfigured", () => {
+	const root = repository();
+	const sourceScript = fileURLToPath(
+		new URL("../../.claude/scripts/gates.sh", import.meta.url),
+	);
+	const gateScript = join(root, ".claude/scripts/gates.sh");
+	writeFileSync(gateScript, readFileSync(sourceScript, "utf8"), "utf8");
+	writeFileSync(
+		join(root, ".factory/gates.conf"),
+		'REQUIRED_DEEP="architecture"\n',
+		"utf8",
+	);
+	writeFileSync(join(root, ".git/index"), "not a git index\n", "utf8");
+	assert.throws(
+		() =>
+			execFileSync("bash", [gateScript, "deep"], {
+				cwd: root,
+				encoding: "utf8",
+				stdio: "pipe",
+			}),
+		(error) => {
+			assert.equal(error.status, 2);
+			assert.match(
+				`${error.stdout}${error.stderr}`,
+				/FACTORY_GATES: level=deep status=MISCONFIGURED.*misconfigured=architecture/,
+			);
+			return true;
+		},
+	);
+});
+
+test("worker command starts from an explicit credential-free environment", () => {
+	const workflow = readFileSync(
+		fileURLToPath(new URL("../../WORKFLOW.md", import.meta.url)),
+		"utf8",
+	);
+	const command = workflow
+		.split("\n")
+		.find((line) => line.trimStart().startsWith("command: env -i"));
+	assert.ok(command);
+	assert.match(command, /shell_environment_policy\.inherit=core/);
+	assert.doesNotMatch(command, /GITHUB_TOKEN|GH_TOKEN|SSH_AUTH_SOCK/);
 });

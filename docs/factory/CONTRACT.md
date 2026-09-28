@@ -63,7 +63,9 @@ node .factory/harness.mjs gate --run <id> --level full
 node .factory/harness.mjs finish --run <id> --status awaiting-review \
   --verification not-run --summary "Ready for controller review"
 node .factory/harness.mjs finalize --run <id> \
-  --candidate-sha "$(git rev-parse HEAD)" # controller only, clean candidate
+  --candidate-sha "$(git rev-parse HEAD)" \
+  --approved-base-sha "$APPROVED_BASE_SHA" \
+  --required-gate-level "$APPROVED_GATE_LEVEL" # controller only
 node .factory/harness.mjs status --json
 ```
 
@@ -110,6 +112,13 @@ the worker-reported file list as `worker_changed_files` and independently
 recompute `changed_files` from the approved base to the candidate. Finalization
 requires every Git cleanliness probe to succeed and rejects symlinks anywhere
 under the candidate's `docs/factory/runs` directory chain.
+
+The approved base SHA and required gate level are controller-owned inputs, never
+trusted from the copied worker ledger. Finalization requires the ledger base to
+equal the approved base; for review candidates it also requires the latest
+zero-exit green gate to equal the approved level. The controller launches Codex
+through an explicit `env -i` allowlist, so tracker/handoff tokens, SSH agent
+sockets, and provider credentials are absent from the worker process.
 
 ## Failure and retry
 

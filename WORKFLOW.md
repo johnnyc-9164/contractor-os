@@ -39,7 +39,7 @@ agent:
   max_turns: 10
   max_retry_backoff_ms: 300000
 codex:
-  command: codex --config shell_environment_policy.inherit=all app-server
+  command: env -i HOME="$HOME" PATH="$PATH" USER="${USER:-codex}" SHELL="${SHELL:-/bin/sh}" LANG="${LANG:-C.UTF-8}" TERM="${TERM:-dumb}" codex --config shell_environment_policy.inherit=core app-server
   approval_policy: never
   thread_sandbox: workspace-write
   turn_sandbox_policy:
@@ -228,7 +228,9 @@ test ! -L "$WORKER_WORKSPACE/.factory/runtime/$RUN_ID/events.jsonl"
 FACTORY_ROOT="$CONTROLLER_CANDIDATE_ROOT" \
   node "$CONTROLLER_FACTORY_ROOT/.factory/harness.mjs" finalize \
   --run "$RUN_ID" \
-  --candidate-sha "$(git -C "$CONTROLLER_CANDIDATE_ROOT" rev-parse HEAD)"
+  --candidate-sha "$(git -C "$CONTROLLER_CANDIDATE_ROOT" rev-parse HEAD)" \
+  --approved-base-sha "$APPROVED_BASE_SHA" \
+  --required-gate-level "$APPROVED_GATE_LEVEL"
 ```
 
 The trusted harness additionally disables repository-local hooks and file-system
@@ -238,8 +240,10 @@ run independent review, CI, and required previews against the final PR head.
 Never finalize a dirty tree or a SHA other than the checked-out candidate.
 Finalization rejects `main`, `master`, a detached `HEAD`, and any dirty
 workspace. It also requires both a parsed `GREEN` verdict and exit code 0,
-recomputes candidate changes from the approved base, and refuses any symlink in
-the durable-record directory chain. Do not replace the fresh-clone boundary or
+requires the worker's latest gate to match the controller-owned gate level,
+binds the worker-reported base to the controller-owned approved base, recomputes
+candidate changes from that approved base, and refuses any symlink in the
+durable-record directory chain. Do not replace the fresh-clone boundary or
 hardening flags with worker-repository configuration or hooks.
 
 For a `blocked` or `failed` packet, preserve evidence with the same trusted
@@ -250,3 +254,9 @@ and finalize against that clean no-op candidate `HEAD`. The resulting record
 keeps `worker_changed_files` but truthfully reports an empty candidate
 `changed_files` list. Commit only the immutable record, then retain or clean up
 the worker workspace according to controller policy.
+
+The worker process itself starts through `env -i` with only the named runtime
+variables above. Tracker and handoff credentials—including `GITHUB_TOKEN`,
+`GH_TOKEN`, SSH agent sockets, and provider secrets—remain in the controller and
+must never enter the Codex worker environment. The shell environment policy may
+inherit only from that already-sanitized process.
