@@ -2,7 +2,7 @@
 
 import { SignInButton } from "@clerk/nextjs";
 import { api } from "@contractor-os/backend/convex/_generated/api";
-import { Button } from "@contractor-os/ui/components/button";
+import { Button, buttonVariants } from "@contractor-os/ui/components/button";
 import {
 	Card,
 	CardContent,
@@ -25,6 +25,7 @@ import {
 	usePaginatedQuery,
 } from "convex/react";
 import { BriefcaseBusiness } from "lucide-react";
+import Link from "next/link";
 import { useMemo } from "react";
 import {
 	formatJobState,
@@ -82,6 +83,12 @@ function JobCard({ job }: { job: JobSummary }) {
 						</dd>
 					</div>
 				</dl>
+				<Link
+					className={`${buttonVariants({ variant: "outline" })} mt-5`}
+					href={`/jobs/${encodeURIComponent(job.identifier)}`}
+				>
+					View job
+				</Link>
 			</CardContent>
 		</Card>
 	);

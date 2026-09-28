@@ -65,7 +65,8 @@ describe("jobs worklist states", () => {
 		]);
 		expect(html).toContain("1 job loaded");
 		expect(html).toContain("Updated exterior repaint");
-		expect(html.match(/job-001/g)).toHaveLength(1);
+		expect(html.match(/<code[^>]*>job-001<\/code>/g)).toHaveLength(1);
+		expect(html).toContain('href="/jobs/job-001"');
 		expect(html).toContain("Load more jobs");
 	});
 
