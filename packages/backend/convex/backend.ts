@@ -210,6 +210,77 @@ export const listLeads = query({
 	handler: (ctx, args) => os.listLeads(ctx, args.paginationOpts),
 });
 
+const invoicePage = v.object({
+	page: v.array(
+		v.object({
+			id: v.string(),
+			identifier: v.string(),
+			title: v.union(v.string(), v.null()),
+			invoiceNumber: v.union(v.string(), v.null()),
+			status: v.union(v.string(), v.null()),
+			amount: v.union(v.number(), v.null()),
+			dueDate: v.union(v.string(), v.null()),
+			revision: v.number(),
+			updatedAt: v.number(),
+		}),
+	),
+	isDone: v.boolean(),
+	continueCursor: v.string(),
+});
+
+type InvoiceRecord = {
+	_id: string;
+	identifier: string;
+	title: string | null;
+	properties: {
+		invoice_number?: string;
+		status?: string;
+		amount?: number;
+		due_date?: string;
+	};
+	revision: number;
+	updatedAt: number;
+};
+
+/** Bounded, tenant-scoped invoice read; balances and payment state are not inferred. */
+export const listInvoices = query({
+	args: { paginationOpts: paginationOptsValidator },
+	returns: invoicePage,
+	handler: async (ctx, { paginationOpts }) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) throw new Error("UNAUTHENTICATED");
+		const membership = await ctx.db
+			.query("contractorOsMemberships")
+			.withIndex("by_identity", (q) =>
+				q.eq("tokenIdentifier", identity.tokenIdentifier),
+			)
+			.unique();
+		if (!membership?.enabled) throw new Error("FORBIDDEN");
+		const results = await ctx.runQuery(
+			components.contractorOs.records.co_invoice.list,
+			{
+				tenantId: membership.tenantId,
+				paginationOpts,
+			},
+		);
+		return {
+			isDone: results.isDone,
+			continueCursor: results.continueCursor,
+			page: results.page.map((row: InvoiceRecord) => ({
+				id: row._id,
+				identifier: row.identifier,
+				title: row.title,
+				invoiceNumber: row.properties.invoice_number ?? null,
+				status: row.properties.status ?? null,
+				amount: row.properties.amount ?? null,
+				dueDate: row.properties.due_date ?? null,
+				revision: row.revision,
+				updatedAt: row.updatedAt,
+			})),
+		};
+	},
+});
+
 import {
 	projectionArgs,
 	projectionResult,
