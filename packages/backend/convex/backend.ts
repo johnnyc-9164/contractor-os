@@ -207,7 +207,34 @@ export const listJobs = query({
 export const listLeads = query({
 	args: { paginationOpts: paginationOptsValidator },
 	returns: listResult,
-	handler: (ctx, args) => os.listLeads(ctx, args.paginationOpts),
+	handler: async (ctx, args) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) throw new Error("UNAUTHENTICATED");
+		const membership = await ctx.db
+			.query("contractorOsMemberships")
+			.withIndex("by_identity", (q) =>
+				q.eq("tokenIdentifier", identity.tokenIdentifier),
+			)
+			.unique();
+		if (!membership?.enabled) throw new Error("FORBIDDEN");
+		const result = await os.listLeads(ctx, args.paginationOpts);
+		return {
+			...result,
+			page: await Promise.all(
+				result.page.map(async (row) => {
+					const local = await ctx.db
+						.query("leads")
+						.withIndex("by_tenant_co_lead_id", (q) =>
+							q
+								.eq("tenantId", membership.tenantId)
+								.eq("co_lead_id", row.identifier),
+						)
+						.unique();
+					return local?.reopened_from ? { ...row, state: local.stage } : row;
+				}),
+			),
+		};
+	},
 });
 
 const invoicePage = v.object({

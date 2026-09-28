@@ -1,4 +1,4 @@
-import { api } from "./_generated/api.js";
+import { api, components } from "./_generated/api.js";
 import type { Doc } from "./_generated/dataModel.js";
 import type { MutationCtx } from "./_generated/server.js";
 import type { ResolvedUser } from "./identity";
@@ -21,7 +21,11 @@ export type ServiceResult = {
 
 export class LeadServiceError extends Error {
 	constructor(
-		public readonly code: "NOT_FOUND" | "GUARD_STAGE" | "GUARD_BLOCKED",
+		public readonly code:
+			| "NOT_FOUND"
+			| "FORBIDDEN"
+			| "GUARD_STAGE"
+			| "GUARD_BLOCKED",
 		message: string,
 	) {
 		super(message);
@@ -42,18 +46,36 @@ function newUlid(): string {
 	return `${encodedTime}${randomness}`;
 }
 
+async function requireTenant(ctx: MutationCtx) {
+	const identity = await ctx.auth.getUserIdentity();
+	if (!identity) throw new LeadServiceError("FORBIDDEN", "UNAUTHENTICATED");
+	const membership = await ctx.db
+		.query("contractorOsMemberships")
+		.withIndex("by_identity", (q) =>
+			q.eq("tokenIdentifier", identity.tokenIdentifier),
+		)
+		.unique();
+	if (!membership?.enabled)
+		throw new LeadServiceError("FORBIDDEN", "FORBIDDEN");
+	return { tenantId: membership.tenantId, actorId: identity.tokenIdentifier };
+}
+
 async function findLead(ctx: MutationCtx, leadId: string) {
-	// Primary: local operational key (lead_<ulid>)
+	const { tenantId } = await requireTenant(ctx);
+	// Both lookup paths are scoped before reading a row. Legacy tenantless
+	// records cannot be attributed safely and deliberately remain inaccessible.
 	let record = await ctx.db
 		.query("leads")
-		.withIndex("by_key", (q) => q.eq("key", leadId))
+		.withIndex("by_tenant_key", (q) =>
+			q.eq("tenantId", tenantId).eq("key", leadId),
+		)
 		.unique();
-	// Fallback: vendored component identifier, bridged via co_lead_id.
-	// UI surfaces list co_leads (api.backend.listLeads) but dispatch lead.* ops.
 	if (!record) {
 		record = await ctx.db
 			.query("leads")
-			.withIndex("by_co_lead_id", (q) => q.eq("co_lead_id", leadId))
+			.withIndex("by_tenant_co_lead_id", (q) =>
+				q.eq("tenantId", tenantId).eq("co_lead_id", leadId),
+			)
 			.unique();
 	}
 	if (!record)
@@ -119,10 +141,12 @@ export async function capture(
 	payload: CapturePayload,
 	actor: ResolvedUser,
 ): Promise<ServiceResult> {
+	const { tenantId } = await requireTenant(ctx);
 	const now = new Date().toISOString();
 	const key = `lead_${newUlid()}`;
 	await ctx.db.insert("leads", {
 		key,
+		tenantId,
 		...payload,
 		stage: "Prospect",
 		created_by: actor.user_key,
@@ -171,17 +195,54 @@ export async function qualify(
 ) {
 	const record = await findLead(ctx, payload.lead_id);
 	guard(record, ["Reply Received"], "Qualifying");
-	const requestKey = newUlid();
-	const created = await ctx.runMutation(api.backend.co_create_lead, {
-		requestKey,
-		input: {
-			stage: "new",
-			title: record.title,
-			client: payload.client_name,
-			description: payload.qualification_notes,
-		},
-	});
-	const coLeadId = created.primary.identifier;
+	let coLeadId: string;
+	let revision: number;
+	if (record.reopened_from && record.co_lead_id === record.key) {
+		// Reopened leads already have a component projection. Attach the client
+		// to that identity before advancing it, instead of creating a second lead.
+		const scope = await requireTenant(ctx);
+		const client = await ctx.runQuery(
+			components.contractorOs.records.co_client.get,
+			{ tenantId: scope.tenantId, identifier: payload.client_name },
+		);
+		const componentLead = await ctx.runQuery(
+			components.contractorOs.records.co_lead.get,
+			{ tenantId: scope.tenantId, identifier: record.key },
+		);
+		if (!client || !componentLead || componentLead.properties.stage !== "new")
+			throw new LeadServiceError(
+				"NOT_FOUND",
+				"Reopened lead or client missing",
+			);
+		const linked = await ctx.runMutation(
+			components.contractorOs.records.co_lead.update,
+			{
+				tenantId: scope.tenantId,
+				actorId: scope.actorId,
+				requestKey: newUlid(),
+				identifier: record.key,
+				expectedRevision: componentLead.revision,
+				properties: payload.qualification_notes
+					? { description: payload.qualification_notes }
+					: {},
+				relations: { client: client._id },
+			},
+		);
+		coLeadId = record.key;
+		revision = linked.revision;
+	} else {
+		const created = await ctx.runMutation(api.backend.co_create_lead, {
+			requestKey: newUlid(),
+			input: {
+				stage: "new",
+				title: record.title,
+				client: payload.client_name,
+				description: payload.qualification_notes,
+			},
+		});
+		coLeadId = created.primary.identifier;
+		revision = created.primary.revision;
+	}
 	await ctx.runMutation(api.backend.co_advance_lead, {
 		requestKey: newUlid(),
 		input: { lead: coLeadId, new_stage: "qualifying" },
@@ -189,7 +250,7 @@ export async function qualify(
 			{
 				blueprint: "co_lead",
 				identifier: coLeadId,
-				revision: created.primary.revision,
+				revision,
 			},
 		],
 	});
@@ -586,10 +647,15 @@ export async function reopen(
 ) {
 	const source = await findLead(ctx, payload.lead_id);
 	guard(source, ["Lost", "Disqualified"], "Prospect");
+	const scope = await requireTenant(ctx);
+	if (!source.tenantId || source.tenantId !== scope.tenantId)
+		throw new LeadServiceError("NOT_FOUND", "Lead not found");
 	const now = new Date().toISOString();
 	const key = `lead_${newUlid()}`;
-	await ctx.db.insert("leads", {
+	const localId = await ctx.db.insert("leads", {
 		key,
+		tenantId: scope.tenantId,
+		co_lead_id: key,
 		title: source.title,
 		source: source.source,
 		contact_name: source.contact_name,
@@ -606,6 +672,23 @@ export async function reopen(
 		schema_version: SCHEMA_VERSION,
 		company_id: COMPANY_ID,
 	});
+	// Write through to the tenant-scoped component read model. The component
+	// identifier equals the new local key, so listLeads exposes one identity.
+	// A component failure rolls back its own writes; remove the local row
+	// before catalog records the blocked attempt.
+	try {
+		await ctx.runMutation(components.contractorOs.records.co_lead.create, {
+			tenantId: scope.tenantId,
+			actorId: scope.actorId,
+			requestKey: `reopen-${key}`,
+			identifier: key,
+			title: source.title,
+			properties: { stage: "new" },
+		});
+	} catch (error) {
+		await ctx.db.delete(localId);
+		throw error;
+	}
 	return {
 		record_id: key,
 		status: "Prospect",
