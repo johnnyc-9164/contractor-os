@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@contractor-os/ui/components/button";
+import { Button, buttonVariants } from "@contractor-os/ui/components/button";
 import {
 	Card,
 	CardContent,
@@ -126,7 +126,7 @@ export function EstimateIntake() {
 			<section className="border-border border-b bg-foreground text-background">
 				<div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:px-8 lg:grid-cols-[1fr_22rem] lg:items-end lg:py-20">
 					<div className="max-w-3xl">
-						<div className="mb-5 flex items-center gap-2 font-medium text-xs uppercase tracking-[0.22em] text-background/70">
+						<div className="mb-5 flex items-center gap-2 font-medium text-background/70 text-xs uppercase tracking-[0.22em]">
 							<Paintbrush aria-hidden="true" className="size-4" />
 							PaintPro project intake
 						</div>
@@ -448,7 +448,7 @@ export function EstimateIntake() {
 	);
 }
 
-function PreparedHandoff({
+export function PreparedHandoff({
 	href,
 	onEdit,
 }: {
@@ -490,10 +490,10 @@ function PreparedHandoff({
 				<Button onClick={onEdit} type="button" variant="outline">
 					Edit details
 				</Button>
-				<Button render={<a href={href} />} size="lg">
+				<a className={buttonVariants({ size: "lg" })} href={href}>
 					<Mail data-icon="inline-start" />
 					Open email draft
-				</Button>
+				</a>
 			</CardFooter>
 		</>
 	);
