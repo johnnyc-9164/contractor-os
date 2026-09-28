@@ -49,6 +49,9 @@ import {
 	findLeadById,
 	type LeadColumns,
 	leadMatchesQuery,
+	mergeReopenedLeads,
+	type ReopenedLead,
+	reopenedLeadFromResult,
 } from "./pipeline-view";
 import { type PendingTransition, TransitionDialog } from "./transition-dialog";
 import {
@@ -168,6 +171,7 @@ export function PipelineBoard() {
 	}, [historyPaginationStatus, loadMoreHistory]);
 
 	const [columns, setColumns] = useState<LeadColumns | null>(null);
+	const [reopenedLeads, setReopenedLeads] = useState<ReopenedLead[]>([]);
 	const [stageOverrides, setStageOverrides] = useState<
 		Record<string, LeadStage>
 	>({});
@@ -178,11 +182,13 @@ export function PipelineBoard() {
 	const [pendingMove, setPendingMove] = useState<{
 		from: LeadStage;
 		to: LeadStage;
-		leadId: string;
+		lead: PipelineLead;
 	} | null>(null);
 
 	const lastHandledBy = useMemo(() => {
 		const map = new Map<string, HistoryEvent>();
+		// Partial tenant history cannot give a reliable latest handler for search.
+		if (historyPaginationStatus !== "Exhausted") return map;
 		for (const event of historyEvents as HistoryEvent[]) {
 			const previous = map.get(event.identifier);
 			if (!previous || event.occurredAt > previous.occurredAt) {
@@ -190,7 +196,7 @@ export function PipelineBoard() {
 			}
 		}
 		return map;
-	}, [historyEvents]);
+	}, [historyEvents, historyPaginationStatus]);
 
 	useEffect(() => {
 		if (leadPaginationStatus !== "Exhausted") return;
@@ -217,74 +223,56 @@ export function PipelineBoard() {
 		});
 	}, [leadPaginationStatus, leadRecords]);
 
-	const seeded = useMemo<LeadColumns | null>(() => {
-		if (
-			leadPaginationStatus !== "Exhausted" ||
-			historyPaginationStatus !== "Exhausted"
-		) {
-			return null;
+	const projectedLeads = useMemo<PipelineLead[] | null>(() => {
+		if (leadPaginationStatus !== "Exhausted") return null;
+
+		const componentLeads: PipelineLead[] = [];
+		for (const record of leadRecords as LeadRecord[]) {
+			const liveStage = toLeadStage(record.state);
+			if (!liveStage) continue;
+			componentLeads.push({
+				id: record.id,
+				identifier: record.identifier,
+				title: record.title,
+				stage: liveStage,
+				updatedAt: record.updatedAt,
+				lastHandledBy: lastHandledBy.get(record.identifier)?.actorId ?? null,
+			});
 		}
+		return mergeReopenedLeads(componentLeads, reopenedLeads).map((lead) => ({
+			...lead,
+			stage: stageOverrides[lead.id] ?? lead.stage,
+		}));
+	}, [
+		leadPaginationStatus,
+		leadRecords,
+		lastHandledBy,
+		reopenedLeads,
+		stageOverrides,
+	]);
+
+	const seeded = useMemo<LeadColumns | null>(() => {
+		if (!projectedLeads) return null;
 
 		const nextColumns: LeadColumns = {};
 		for (const stage of BOARD_COLUMNS) nextColumns[stage] = [];
-
-		for (const record of leadRecords as LeadRecord[]) {
-			const liveStage = toLeadStage(record.state);
-			const stage = stageOverrides[record.id] ?? liveStage;
-			if (!stage || TERMINAL_STAGES.includes(stage)) continue;
-
-			nextColumns[stage].push({
-				id: record.id,
-				identifier: record.identifier,
-				title: record.title,
-				stage,
-				updatedAt: record.updatedAt,
-				lastHandledBy: lastHandledBy.get(record.identifier)?.actorId ?? null,
-			});
+		for (const lead of projectedLeads) {
+			if (!TERMINAL_STAGES.includes(lead.stage)) {
+				nextColumns[lead.stage].push(lead);
+			}
 		}
-
 		return nextColumns;
-	}, [
-		historyPaginationStatus,
-		leadPaginationStatus,
-		leadRecords,
-		lastHandledBy,
-		stageOverrides,
-	]);
+	}, [projectedLeads]);
 
 	const activeColumns = columns ?? seeded;
 
-	const terminalLeads = useMemo<PipelineLead[]>(() => {
-		if (
-			leadPaginationStatus !== "Exhausted" ||
-			historyPaginationStatus !== "Exhausted"
-		) {
-			return [];
-		}
-
-		const leads: PipelineLead[] = [];
-		for (const record of leadRecords as LeadRecord[]) {
-			const liveStage = toLeadStage(record.state);
-			const stage = stageOverrides[record.id] ?? liveStage;
-			if (!stage || !TERMINAL_STAGES.includes(stage)) continue;
-
-			leads.push({
-				id: record.id,
-				identifier: record.identifier,
-				title: record.title,
-				stage,
-				updatedAt: record.updatedAt,
-				lastHandledBy: lastHandledBy.get(record.identifier)?.actorId ?? null,
-			});
-		}
-		return leads;
-	}, [
-		historyPaginationStatus,
-		leadPaginationStatus,
-		leadRecords,
-		lastHandledBy,
-		stageOverrides,
-	]);
+	const terminalLeads = useMemo(
+		() =>
+			(projectedLeads ?? []).filter((lead) =>
+				TERMINAL_STAGES.includes(lead.stage),
+			),
+		[projectedLeads],
+	);
 
 	const selectedLead = useMemo(
 		() => findLeadById(seeded ?? {}, terminalLeads, selectedLeadId),
@@ -304,10 +292,17 @@ export function PipelineBoard() {
 		contract: string,
 		payload: Record<string, unknown>,
 		rollbackTo: LeadColumns,
-		successMove: { leadId: string; to: LeadStage },
+		successMove: { lead: PipelineLead; to: LeadStage },
 		successLabel: string,
 	) => {
-		let result: { ok: boolean; blockers?: Array<{ message?: string }> };
+		let result: {
+			ok: boolean;
+			blockers?: Array<{ message?: string }>;
+			record_id?: string | null;
+			entity_refs?: string[];
+			executor?: string | null;
+			updated_at?: string;
+		};
 		try {
 			result = await dispatch({
 				contract,
@@ -331,10 +326,51 @@ export function PipelineBoard() {
 			return;
 		}
 
-		setStageOverrides((current) => ({
-			...current,
-			[successMove.leadId]: successMove.to,
-		}));
+		const updatedAt = Date.parse(result.updated_at ?? "");
+		const timestamp = Number.isNaN(updatedAt) ? Date.now() : updatedAt;
+		if (contract === "lead.reopen") {
+			const newLead = reopenedLeadFromResult(
+				successMove.lead,
+				result.record_id ?? null,
+				result.executor ?? null,
+				timestamp,
+			);
+			if (!newLead) {
+				setColumns(rollbackTo);
+				toast.error("The reopened lead has no returned record ID.");
+				return;
+			}
+			setReopenedLeads((current) => [
+				...current.filter(({ lead }) => lead.id !== newLead.id),
+				{ lead: newLead, componentIdentifier: null },
+			]);
+		} else {
+			// Reopened leads live in the local lead table until qualifying
+			// publishes a new component record with its own identifier.
+			setReopenedLeads((current) =>
+				current.map((entry) => {
+					if (entry.lead.id !== successMove.lead.id) return entry;
+					const componentIdentifier =
+						contract === "lead.qualify"
+							? (result.entity_refs?.find((ref) => ref !== result.record_id) ??
+								entry.componentIdentifier)
+							: entry.componentIdentifier;
+					return {
+						lead: {
+							...entry.lead,
+							stage: successMove.to,
+							updatedAt: timestamp,
+							lastHandledBy: result.executor ?? entry.lead.lastHandledBy,
+						},
+						componentIdentifier,
+					};
+				}),
+			);
+			setStageOverrides((current) => ({
+				...current,
+				[successMove.lead.id]: successMove.to,
+			}));
+		}
 		setColumns(null);
 		toast.success(successLabel);
 	};
@@ -366,7 +402,7 @@ export function PipelineBoard() {
 		setSelectedLeadId(null);
 
 		if (needsDialog(contract)) {
-			setPendingMove({ from: lead.stage, to, leadId: lead.id });
+			setPendingMove({ from: lead.stage, to, lead });
 			setPending({
 				leadId: lead.identifier,
 				leadTitle: lead.title || lead.identifier,
@@ -385,7 +421,7 @@ export function PipelineBoard() {
 			contract,
 			{ lead_id: lead.identifier },
 			rollbackTo,
-			{ leadId: lead.id, to },
+			{ lead, to },
 			`Moved to ${to}`,
 		);
 	};
@@ -410,10 +446,10 @@ export function PipelineBoard() {
 	const handleDialogConfirm = (payload: Record<string, unknown>) => {
 		if (!pending || !pendingMove || !activeColumns) return;
 
-		const { from, to, leadId } = pendingMove;
+		const { from, to, lead } = pendingMove;
 		const contract = pending.contract;
 		const rollbackTo = activeColumns;
-		const optimisticColumns = applyMove(activeColumns, from, to, leadId);
+		const optimisticColumns = applyMove(activeColumns, from, to, lead.id);
 		setColumns(optimisticColumns);
 		setPending(null);
 		setPendingMove(null);
@@ -421,7 +457,7 @@ export function PipelineBoard() {
 			contract,
 			payload,
 			rollbackTo,
-			{ leadId, to },
+			{ lead, to },
 			`Moved to ${to}`,
 		);
 	};
@@ -450,7 +486,11 @@ export function PipelineBoard() {
 						type="search"
 						value={query}
 						onChange={(event) => setQuery(event.target.value)}
-						placeholder="Search leads"
+						placeholder={
+							historyPaginationStatus === "Exhausted"
+								? "Search leads or last handler"
+								: "Search leads"
+						}
 						aria-label="Search leads"
 					/>
 					{hasQuery ? (
@@ -492,6 +532,9 @@ export function PipelineBoard() {
 					Open a card for its live record and keyboard-accessible stage actions.
 					Drag cards when search is clear. If a move cannot be completed, the
 					card returns to its previous stage with the reason.
+					{historyPaginationStatus !== "Exhausted"
+						? " Last-handler search becomes available after history loads."
+						: ""}
 					{!isPrincipal
 						? " Awarding or winning requires principal authority."
 						: ""}
@@ -518,7 +561,9 @@ export function PipelineBoard() {
 						</EmptyMedia>
 						<EmptyTitle>No matching active leads</EmptyTitle>
 						<EmptyDescription>
-							Try a lead name, record identifier, stage, or last handler.
+							{historyPaginationStatus === "Exhausted"
+								? "Try a lead name, record identifier, stage, or last handler."
+								: "Try a lead name, record identifier, or stage."}
 						</EmptyDescription>
 					</EmptyHeader>
 				</Empty>

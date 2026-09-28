@@ -6,6 +6,8 @@ import {
 	findLeadById,
 	type LeadColumns,
 	leadMatchesQuery,
+	mergeReopenedLeads,
+	reopenedLeadFromResult,
 } from "./pipeline-view";
 
 const sarah: PipelineLead = {
@@ -86,5 +88,43 @@ describe("findLeadById", () => {
 		expect(findLeadById({}, [wonSarah], wonSarah.id)).toBe(wonSarah);
 		expect(findLeadById(columns, [wonSarah], "missing")).toBeNull();
 		expect(findLeadById(columns, [wonSarah], null)).toBeNull();
+	});
+});
+
+describe("reopened lead projection", () => {
+	it("uses the new server record key and retains the terminal source record", () => {
+		const source = { ...sarah, stage: "Lost" as const };
+		const reopened = reopenedLeadFromResult(
+			source,
+			"lead_new",
+			"principal@example.com",
+			1_700_000_200_000,
+		);
+		expect(reopened).toMatchObject({
+			id: "lead_new",
+			identifier: "lead_new",
+			stage: "Prospect",
+			title: source.title,
+		});
+		expect(reopened).not.toBe(source);
+		expect(source.stage).toBe("Lost");
+		expect(reopenedLeadFromResult(source, null, null, 0)).toBeNull();
+	});
+
+	it("keeps the local lead until its linked component identifier appears", () => {
+		const reopened = reopenedLeadFromResult(sarah, "lead_new", null, 5);
+		if (!reopened) throw new Error("Expected reopened record");
+		const local = { lead: reopened, componentIdentifier: "CO-NEW" };
+		const terminalSource = { ...sarah, stage: "Lost" as const };
+
+		expect(mergeReopenedLeads([terminalSource], [local])).toEqual([
+			terminalSource,
+			reopened,
+		]);
+
+		const componentCopy = { ...reopened, id: "convex-id", identifier: "CO-NEW" };
+		expect(
+			mergeReopenedLeads([terminalSource, componentCopy], [local]),
+		).toEqual([terminalSource, componentCopy]);
 	});
 });

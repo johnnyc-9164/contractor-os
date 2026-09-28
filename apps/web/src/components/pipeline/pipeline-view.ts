@@ -2,6 +2,50 @@ import type { PipelineLead } from "./lead-card";
 
 export type LeadColumns = Record<string, PipelineLead[]>;
 
+export type ReopenedLead = {
+	lead: PipelineLead;
+	// Qualifying creates a component lead with a distinct identifier.
+	componentIdentifier: string | null;
+};
+
+export function reopenedLeadFromResult(
+	source: PipelineLead,
+	recordId: string | null,
+	actor: string | null,
+	updatedAt: number,
+): PipelineLead | null {
+	if (!recordId) return null;
+	return {
+		id: recordId,
+		identifier: recordId,
+		title: source.title,
+		stage: "Prospect",
+		updatedAt,
+		lastHandledBy: actor,
+	};
+}
+
+export function mergeReopenedLeads(
+	componentLeads: PipelineLead[],
+	reopenedLeads: ReopenedLead[],
+): PipelineLead[] {
+	const componentIds = new Set(componentLeads.map((lead) => lead.id));
+	const componentIdentifiers = new Set(
+		componentLeads.map((lead) => lead.identifier),
+	);
+	return [
+		...componentLeads,
+		...reopenedLeads
+			.filter(
+				({ lead, componentIdentifier }) =>
+					!componentIds.has(lead.id) &&
+					(!componentIdentifier ||
+						!componentIdentifiers.has(componentIdentifier)),
+			)
+			.map(({ lead }) => lead),
+	];
+}
+
 function normalizeSearch(value: string): string {
 	return value.trim().toLocaleLowerCase("en-US");
 }
