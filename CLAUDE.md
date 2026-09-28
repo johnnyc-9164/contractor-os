@@ -76,6 +76,20 @@ Call a gate at **every** seam, not just the big three:
 - Report with evidence: commands, exit codes, commit SHAs, check names.
   Correct inaccurate claims (anyone's, including your own) with a fix or test.
 
+## Factory enforcement
+
+- A Symphony-dispatched worker reads `docs/factory/CHARTER.md` and
+  `docs/factory/CONTRACT.md`, then uses the repository-owned factory skills.
+- Start the run ledger before investigation. Execute material commands through
+  `.factory/harness.mjs exec`, record a gate verdict, and expose progress with
+  `.factory/harness.mjs status --json`.
+- The harness fails closed: a successful run requires the latest recorded gate
+  to be green and verification to be independently accepted.
+- The worker may commit and push its issue branch, but never merges, deploys,
+  force-pushes, modifies factory constraints, or crosses charter stop limits.
+- Move the GitHub issue through factory labels and maintain one workpad comment.
+  Remove the `symphony` label when awaiting human review, blocked, or complete.
+
 ## Communication
 
 - Conclusion first. Say what was done, verified, and what remains.
