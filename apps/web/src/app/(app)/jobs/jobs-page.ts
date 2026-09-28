@@ -15,7 +15,9 @@ export function uniqueJobs(jobs: readonly JobSummary[]): JobSummary[] {
 		if (position === undefined) {
 			positions.set(job.id, unique.length);
 			unique.push(job);
-		} else {
+		} else if (
+			job.updatedAt >= (unique[position]?.updatedAt ?? Number.NEGATIVE_INFINITY)
+		) {
 			unique[position] = job;
 		}
 	}

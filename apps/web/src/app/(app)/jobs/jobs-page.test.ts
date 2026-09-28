@@ -50,6 +50,17 @@ describe("jobs worklist data", () => {
 		expect(jobs[1]?.title).toBe("Interior repaint");
 	});
 
+	it("does not replace a newer job with an older overlapping page row", () => {
+		const latest = { ...firstPage[0], title: "Current title" };
+		const older = {
+			...latest,
+			title: "Old title",
+			updatedAt: latest.updatedAt - 1,
+		};
+
+		expect(uniqueJobs([latest, older])).toEqual([latest]);
+	});
+
 	it("uses the stable identifier when a job has no title", () => {
 		expect(jobTitle(firstPage[1])).toBe("job-002");
 	});
