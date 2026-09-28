@@ -25,8 +25,9 @@ holds the local schema, auth config, and facade modules.
   `convex-test` unit tests with mocked identities, not production runtime
   security proof. `listSites` paginates tenant-indexed site mappings before
   resolving the corresponding component sites, keeping page size and cursors
-  tenant-scoped. `createSite` still calls component creation before validating
-  an existing ownership mapping (GH-59).
+  tenant-scoped. `createSite` checks ownership before invoking the component;
+  a foreign mapped site cannot reach its create operation, while a same-tenant
+  idempotent replay is retained.
 
 ## Rules
 

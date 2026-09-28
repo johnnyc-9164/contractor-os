@@ -1,5 +1,6 @@
+import { SiteNamespace } from "@johnnyc2026/cms";
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import cmsSchema from "../node_modules/@johnnyc2026/cms/src/component/schema.js";
 import { api } from "./_generated/api.js";
 import schema from "./schema.js";
@@ -130,14 +131,31 @@ describe("CMS facade tenant isolation", () => {
 		const t = setup();
 		const tenantA = await addTenant(t, "issuer|alice", "tenant-a");
 		const tenantB = await addTenant(t, "issuer|bob", "tenant-b");
-		await tenantA.mutation(
+		const ownedId = await tenantA.mutation(
 			api.cms.createSite,
 			siteArgs("alpha", "create-alpha"),
 		);
-
-		await expect(
-			tenantB.mutation(api.cms.createSite, siteArgs("alpha", "create-alpha")),
-		).rejects.toThrow();
+		const create = vi.spyOn(SiteNamespace.prototype, "create");
+		try {
+			await expect(
+				tenantB.mutation(api.cms.createSite, siteArgs("alpha", "create-alpha")),
+			).rejects.toThrow("tenant access denied");
+			expect(create).not.toHaveBeenCalled();
+		} finally {
+			create.mockRestore();
+		}
+		expect(
+			await tenantA.mutation(
+				api.cms.createSite,
+				siteArgs("alpha", "create-alpha"),
+			),
+		).toBe(ownedId);
+		expect(
+			(await tenantA.query(api.cms.getSite, { identifier: "alpha" }))?.revision,
+		).toBe(1);
+		expect(
+			(await tenantB.query(api.cms.listSites, { paginationOpts })).page,
+		).toEqual([]);
 	});
 
 	it("rejects unauthenticated access to all four operations", async () => {

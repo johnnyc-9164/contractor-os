@@ -83,8 +83,8 @@ observed SHA equals `GITHUB_SHA` and Convex reports healthy).
   configuration or behavior.
   `listSites` paginates tenant-indexed site mappings before resolving each
   component site, so pages and cursors are scoped to the caller's tenant.
-  The facade is not fully resolved: `createSite` invokes component creation
-  before validating an existing ownership mapping (GH-59).
+  `createSite` checks an existing site-to-tenant mapping before component
+  creation, rejecting foreign idempotent replays without a component call.
 - Production: `https://contractoros-ten.vercel.app`, Convex `posh-cobra-868`
 
 ## Conventions (facts, not philosophy)
