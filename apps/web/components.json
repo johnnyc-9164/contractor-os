@@ -15,8 +15,7 @@
 		"components": "@/components",
 		"utils": "@contractor-os/ui/lib/utils",
 		"ui": "@contractor-os/ui/components",
-		"lib": "@/lib",
-		"hooks": "@/hooks"
+		"lib": "@/lib"
 	},
 	"menuColor": "default",
 	"menuAccent": "subtle",
