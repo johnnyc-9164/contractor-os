@@ -46,6 +46,45 @@ const siteArgs = (identifier: string, idempotencyKey?: string) => ({
 });
 
 describe("CMS facade tenant isolation", () => {
+	it("fills owned pages and advances cursors across interleaved tenants", async () => {
+		const t = setup();
+		const tenantA = await addTenant(t, "issuer|alice", "tenant-a");
+		const tenantB = await addTenant(t, "issuer|bob", "tenant-b");
+		for (const [tenant, identifier] of [
+			[tenantB, "bravo-1"],
+			[tenantA, "alpha-1"],
+			[tenantB, "bravo-2"],
+			[tenantA, "alpha-2"],
+			[tenantB, "bravo-3"],
+			[tenantA, "alpha-3"],
+		] as const) {
+			await tenant.mutation(api.cms.createSite, siteArgs(identifier));
+		}
+		const first = await tenantA.query(api.cms.listSites, {
+			paginationOpts: { numItems: 2, cursor: null },
+		});
+		expect(
+			first.page.map((site: { identifier: string }) => site.identifier),
+		).toEqual(["alpha-1", "alpha-2"]);
+		expect(first.isDone).toBe(false);
+		const second = await tenantA.query(api.cms.listSites, {
+			paginationOpts: { numItems: 2, cursor: first.continueCursor },
+		});
+		expect(
+			second.page.map((site: { identifier: string }) => site.identifier),
+		).toEqual(["alpha-3"]);
+		expect(second.isDone).toBe(true);
+		expect(
+			[...first.page, ...second.page].map((site) => site.identifier),
+		).toEqual(["alpha-1", "alpha-2", "alpha-3"]);
+		const b = await tenantB.query(api.cms.listSites, {
+			paginationOpts: { numItems: 2, cursor: null },
+		});
+		expect(
+			b.page.map((site: { identifier: string }) => site.identifier),
+		).toEqual(["bravo-1", "bravo-2"]);
+	});
+
 	it("allows same-tenant create, read, list, and update", async () => {
 		const t = setup();
 		const tenant = await addTenant(t, "issuer|alice", "tenant-a");
