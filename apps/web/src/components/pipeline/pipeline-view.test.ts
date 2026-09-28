@@ -122,7 +122,11 @@ describe("reopened lead projection", () => {
 			reopened,
 		]);
 
-		const componentCopy = { ...reopened, id: "convex-id", identifier: "CO-NEW" };
+		const componentCopy = {
+			...reopened,
+			id: "convex-id",
+			identifier: "CO-NEW",
+		};
 		expect(
 			mergeReopenedLeads([terminalSource, componentCopy], [local]),
 		).toEqual([terminalSource, componentCopy]);
