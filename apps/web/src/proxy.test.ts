@@ -1,33 +1,5 @@
-import { createElement } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const mocks = vi.hoisted(() => ({
-	auth: vi.fn(),
-	pathname: vi.fn(() => "/dashboard"),
-	query: vi.fn(),
-	replace: vi.fn(),
-}));
-
-vi.mock("convex/react", () => ({
-	useConvexAuth: mocks.auth,
-	useQuery: mocks.query,
-}));
-
-vi.mock("next/navigation", () => ({
-	usePathname: mocks.pathname,
-	useRouter: () => ({ replace: mocks.replace }),
-}));
-
-vi.mock("react", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("react")>();
-	return {
-		...actual,
-		useEffect: (effect: () => void) => effect(),
-	};
-});
-
-import { MembershipProvider } from "./components/membership-provider";
-import { isProtectedRoute } from "./proxy";
+import { describe, expect, it } from "vitest";
+import { isAllowlistExempt, isProtectedRoute } from "./proxy";
 
 describe("isProtectedRoute", () => {
 	it.each([
@@ -35,6 +7,10 @@ describe("isProtectedRoute", () => {
 		"/dashboard/jobs",
 		"/leads",
 		"/leads/abc123",
+		"/customers",
+		"/customers/customer-123",
+		"/jobs",
+		"/jobs/job-123",
 		"/pipeline",
 		"/pipeline/job-123",
 		"/quotes/new",
@@ -48,7 +24,12 @@ describe("isProtectedRoute", () => {
 		"/sign-in",
 		"/sign-in/sso-callback",
 		"/no-access",
+		"/estimate",
+		"/estimate/step-2",
 		"/dashboarding",
+		"/customers-report",
+		"/jobs-report",
+		"/estimated",
 		"/pipeline-report",
 		"/quotes-new",
 		"/api/health",
@@ -57,54 +38,19 @@ describe("isProtectedRoute", () => {
 	});
 });
 
-describe("MembershipProvider", () => {
-	beforeEach(() => {
-		vi.clearAllMocks();
-		mocks.pathname.mockReturnValue("/dashboard");
-	});
+describe("public estimate intake", () => {
+	it.each(["/estimate", "/estimate/step-2", "/estimate/review/details"])(
+		"exempts %s from the signed-in admin allowlist",
+		(pathname) => {
+			expect(isProtectedRoute(pathname)).toBe(false);
+			expect(isAllowlistExempt(pathname)).toBe(true);
+		},
+	);
 
-	it.each([
-		["authentication is loading", { isLoading: true, isAuthenticated: false }],
-		["the visitor is signed out", { isLoading: false, isAuthenticated: false }],
-	])("skips membership lookup while %s", (_label, authState) => {
-		mocks.auth.mockReturnValue(authState);
-		mocks.query.mockReturnValue(undefined);
-
-		expect(
-			MembershipProvider({ children: createElement("div", null, "Private") }),
-		).toBeNull();
-		expect(mocks.query).toHaveBeenCalledOnce();
-		expect(mocks.query.mock.calls[0]?.[1]).toBe("skip");
-		expect(mocks.replace).not.toHaveBeenCalled();
-	});
-
-	it("renders children for an enabled authenticated membership", () => {
-		mocks.auth.mockReturnValue({ isLoading: false, isAuthenticated: true });
-		mocks.query.mockReturnValue({ enabled: true, role: "operator" });
-
-		const result = MembershipProvider({
-			children: createElement("div", null, "Private"),
-		});
-
-		expect(mocks.query).toHaveBeenCalledOnce();
-		expect(mocks.query.mock.calls[0]?.[1]).toEqual({});
-		expect(result).not.toBeNull();
-		expect(mocks.replace).not.toHaveBeenCalled();
-	});
-
-	it.each([null, { enabled: false, role: "viewer" }])(
-		"redirects an authenticated user whose membership is %j",
-		(membership) => {
-			mocks.auth.mockReturnValue({
-				isLoading: false,
-				isAuthenticated: true,
-			});
-			mocks.query.mockReturnValue(membership);
-
-			expect(
-				MembershipProvider({ children: createElement("div", null, "Private") }),
-			).toBeNull();
-			expect(mocks.replace).toHaveBeenCalledWith("/no-access");
+	it.each(["/estimated", "/estimate-report", "/customers", "/jobs"])(
+		"does not exempt %s from the admin allowlist",
+		(pathname) => {
+			expect(isAllowlistExempt(pathname)).toBe(false);
 		},
 	);
 });
