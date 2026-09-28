@@ -75,6 +75,15 @@ export function EstimateIntake() {
 	);
 	const [errors, setErrors] = useState<EstimateIntakeErrors>({});
 	const [status, setStatus] = useState<IntakeStatus>("editing");
+	const previousStatus = useRef<IntakeStatus>("editing");
+	const projectTypeRef = useRef<HTMLInputElement>(null);
+
+	useEffect(() => {
+		if (status === "editing" && previousStatus.current === "prepared") {
+			projectTypeRef.current?.focus();
+		}
+		previousStatus.current = status;
+	}, [status]);
 
 	const update = <Key extends keyof EstimateIntakeValues>(
 		key: Key,
@@ -235,6 +244,12 @@ export function EstimateIntake() {
 															checked={selected}
 															className="sr-only"
 															name="projectType"
+															ref={
+																projectType ===
+																(values.projectType || PROJECT_TYPES[0])
+																	? projectTypeRef
+																	: undefined
+															}
 															onChange={() =>
 																update("projectType", projectType)
 															}
