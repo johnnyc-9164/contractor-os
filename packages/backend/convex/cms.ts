@@ -66,8 +66,6 @@ export const createSite = mutation({
 	},
 	handler: async (ctx, args) => {
 		const tenantId = await requireTenant(ctx);
-		// returns the new record id as an opaque string
-		const id = await cms.site.create(ctx, args);
 		const mapping = await ctx.db
 			.query("cmsSiteTenants")
 			.withIndex("by_site", (q) => q.eq("siteIdentifier", args.identifier))
@@ -75,6 +73,8 @@ export const createSite = mutation({
 		if (mapping && mapping.tenantId !== tenantId) {
 			throw new Error("tenant access denied");
 		}
+		// Check ownership before the component sees even an idempotent replay.
+		const id = await cms.site.create(ctx, args);
 		if (!mapping) {
 			const now = new Date().toISOString();
 			await ctx.db.insert("cmsSiteTenants", {
