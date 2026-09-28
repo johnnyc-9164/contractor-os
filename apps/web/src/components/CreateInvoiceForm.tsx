@@ -3,6 +3,7 @@
 import { api } from "@contractor-os/backend/convex/_generated/api";
 import { useMutation } from "convex/react";
 import { useState } from "react";
+import { submitInvoiceDraft } from "./invoice-submission";
 
 export function CreateInvoiceForm({ onCreated }: { onCreated?: () => void }) {
 	const createInvoice = useMutation(api.backend.co_create_invoice);
@@ -13,39 +14,29 @@ export function CreateInvoiceForm({ onCreated }: { onCreated?: () => void }) {
 	const [amount, setAmount] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [amountError, setAmountError] = useState<string | null>(null);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (
-			!job.trim() ||
-			!client.trim() ||
-			!invoiceNumber.trim() ||
-			!invoiceType.trim() ||
-			!amount.trim()
-		) {
-			setError(
-				"Job, Client, Invoice Number, Invoice Type, and Amount are required.",
-			);
-			return;
-		}
-		const amountNum = Number.parseFloat(amount);
-		if (isNaN(amountNum) || amountNum <= 0) {
-			setError("Amount must be a positive number.");
-			return;
-		}
 		setSubmitting(true);
 		setError(null);
+		setAmountError(null);
 		try {
-			await createInvoice({
-				requestKey: `invoice-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-				input: {
-					job: job.trim(),
-					client: client.trim(),
-					invoice_number: invoiceNumber.trim(),
-					invoice_type: invoiceType.trim(),
-					amount: amountNum,
+			const result = await submitInvoiceDraft(
+				{
+					job,
+					client,
+					invoiceNumber,
+					invoiceType,
+					amount,
 				},
-			});
+				createInvoice,
+			);
+			if (!result.ok) {
+				if (result.field === "amount") setAmountError(result.error);
+				else setError(result.error);
+				return;
+			}
 			setJob("");
 			setClient("");
 			setInvoiceNumber("");
@@ -106,15 +97,28 @@ export function CreateInvoiceForm({ onCreated }: { onCreated?: () => void }) {
 				style={inputStyle}
 			/>
 			<input
-				type="number"
+				type="text"
+				inputMode="decimal"
 				placeholder="Amount (required)"
 				value={amount}
-				onChange={(e) => setAmount(e.target.value)}
+				onChange={(e) => {
+					setAmount(e.target.value);
+					setAmountError(null);
+				}}
 				disabled={submitting}
 				style={inputStyle}
-				min="0"
-				step="0.01"
+				aria-invalid={amountError ? true : undefined}
+				aria-describedby={amountError ? "invoice-amount-error" : undefined}
 			/>
+			{amountError && (
+				<p
+					id="invoice-amount-error"
+					role="alert"
+					style={{ color: "red", fontSize: "0.875rem" }}
+				>
+					{amountError}
+				</p>
+			)}
 			{error && (
 				<div style={{ color: "red", fontSize: "0.875rem" }}>{error}</div>
 			)}
