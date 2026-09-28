@@ -365,10 +365,13 @@ describe("approved estimate query authorization", () => {
 		let cursor: string | null = null;
 		let isDone = false;
 		while (!isDone) {
-			const result: ApprovedEstimateListResult = await caller.query(listApproved, {
-				leadId: "lead_alpha",
-				paginationOpts: { cursor, numItems: 2 },
-			});
+			const result: ApprovedEstimateListResult = await caller.query(
+				listApproved,
+				{
+					leadId: "lead_alpha",
+					paginationOpts: { cursor, numItems: 2 },
+				},
+			);
 			seen.push(...result.page.map((row) => row.estimateKey));
 			cursor = result.continueCursor;
 			isDone = result.isDone;
