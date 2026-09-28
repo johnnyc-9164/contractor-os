@@ -114,6 +114,15 @@ jobs:
           # Signed-out page navigation to /dashboard must redirect to the
           # sign-in route, never 404. (Accept: text/html makes Clerk treat this
           # as a page request, the same as a real browser navigation.)
+          # NOTE: while the project runs on Clerk TEST keys, Clerk's
+          # dev-browser handshake interstitial fires before the middleware's
+          # own /sign-in redirect: the 307 goes to
+          # <instance>.clerk.accounts.dev/v1/client/handshake with
+          # __clerk_hs_reason=dev-browser-missing. That still proves
+          # /dashboard is auth-protected (not 404, not served open), so the
+          # smoke gate accepts it. When test keys are replaced with live keys
+          # (Johnny's call), the handshake goes away and the /sign-in branch
+          # below is the live assertion again.
           code=$(curl -s -o /dev/null -w "%{http_code}" -H "Accept: text/html" "$base/dashboard")
           location=$(curl -s -o /dev/null -w "%{redirect_url}" -H "Accept: text/html" "$base/dashboard")
           echo "GET /dashboard -> $code (redirect target: ${location:-<none>})"
@@ -125,8 +134,11 @@ jobs:
             */sign-in*)
               echo "signed-out /dashboard redirects toward /sign-in"
               ;;
+            *clerk.accounts.dev*/handshake*|*__clerk_hs_reason=*)
+              echo "signed-out /dashboard redirects into Clerk dev handshake (test keys in use; auth middleware engaged)"
+              ;;
             *)
-              echo "FAIL: expected a redirect toward /sign-in, got: $code ${location:-<none>}"
+              echo "FAIL: expected a redirect toward /sign-in (or the Clerk dev handshake under test keys), got: $code ${location:-<none>}"
               exit 1
               ;;
           esac

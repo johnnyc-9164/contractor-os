@@ -9,7 +9,15 @@ export function isProtectedRoute(pathname: string): boolean {
 		pathname === "/dashboard" ||
 		pathname.startsWith("/dashboard/") ||
 		pathname === "/leads" ||
-		pathname.startsWith("/leads/")
+		pathname.startsWith("/leads/") ||
+		pathname === "/customers" ||
+		pathname.startsWith("/customers/") ||
+		pathname === "/jobs" ||
+		pathname.startsWith("/jobs/") ||
+		pathname === "/pipeline" ||
+		pathname.startsWith("/pipeline/") ||
+		pathname === "/quotes" ||
+		pathname.startsWith("/quotes/")
 	);
 }
 
@@ -20,8 +28,10 @@ function getAdminEmails(): string[] {
 		.filter(Boolean);
 }
 
-function isAllowlistExempt(pathname: string): boolean {
+export function isAllowlistExempt(pathname: string): boolean {
 	return (
+		pathname === "/estimate" ||
+		pathname.startsWith("/estimate/") ||
 		pathname === "/sign-in" ||
 		pathname.startsWith("/sign-in/") ||
 		pathname === "/not-authorized" ||
