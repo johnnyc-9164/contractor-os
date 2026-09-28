@@ -361,7 +361,9 @@ export function CustomerCrm({
 							onClick={onLoadMore}
 							variant="outline"
 						>
-							{status === "loading-more" ? "Loading more leads" : "Load more leads"}
+							{status === "loading-more"
+								? "Loading more leads"
+								: "Load more leads"}
 						</Button>
 					</div>
 				) : null}
