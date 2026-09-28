@@ -25,15 +25,6 @@ hooks:
     pnpm install --frozen-lockfile
     graft build --no-gitignore --no-ignore .
     node .factory/harness.mjs doctor --json
-  before_run: |
-    git fetch origin master --prune
-    graft build --no-gitignore --no-ignore .
-    node .factory/harness.mjs doctor --json
-  after_run: |
-    node .factory/harness.mjs status --json || true
-  before_remove: |
-    node .factory/harness.mjs status --json || true
-    git status --short --branch || true
 agent:
   max_concurrent_agents: 4
   max_turns: 10
@@ -260,3 +251,9 @@ variables above. Tracker and handoff credentials—including `GITHUB_TOKEN`,
 `GH_TOKEN`, SSH agent sockets, and provider secrets—remain in the controller and
 must never enter the Codex worker environment. The shell environment policy may
 inherit only from that already-sanitized process.
+
+There are no `before_run`, `after_run`, or `before_remove` hooks. On retries the
+worker fetches the approved base and rebuilds Graft through its sanitized Codex
+environment as required by the start sequence. Observe the runtime ledger only
+through the sanitized worker process or the pinned controller checkout after
+handoff. A hook must never run the mutable worker tree with tracker credentials.

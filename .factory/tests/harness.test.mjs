@@ -504,3 +504,18 @@ test("worker command starts from an explicit credential-free environment", () =>
 	assert.match(command, /shell_environment_policy\.inherit=core/);
 	assert.doesNotMatch(command, /GITHUB_TOKEN|GH_TOKEN|SSH_AUTH_SOCK/);
 });
+
+test("retry and terminal hooks never execute a mutable worker checkout", () => {
+	const workflow = readFileSync(
+		fileURLToPath(new URL("../../WORKFLOW.md", import.meta.url)),
+		"utf8",
+	);
+	const frontmatter = workflow.split("\n---\n", 2)[0];
+	const hooks = frontmatter
+		.split("\n")
+		.filter((line) =>
+			/^  (after_create|before_run|after_run|before_remove):/.test(line),
+		)
+		.map((line) => line.trim());
+	assert.deepEqual(hooks, ["after_create: |"]);
+});
