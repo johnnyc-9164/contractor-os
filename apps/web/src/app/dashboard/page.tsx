@@ -307,7 +307,7 @@ function OperationsDashboard() {
 					value={metrics.activeJobs}
 				/>
 				<MetricCard
-					description="Replies, qualification, and site visits in view"
+					description={`${leadScope}; replies, qualification, and site visits`}
 					icon={ClipboardList}
 					label="Needs follow-up"
 					value={metrics.followUps}
