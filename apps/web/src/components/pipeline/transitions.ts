@@ -121,6 +121,13 @@ export function needsDialog(contract: string): boolean {
 	return contract in DIALOG_FIELDS;
 }
 
+export const PROPOSAL_PREREQUISITE =
+	"Sending a proposal requires a persisted approved estimate version for this lead and its engine-computed total. This pipeline action is unavailable until approved estimates are connected.";
+
+export function blockedTransitionReason(contract: string): string | null {
+	return contract === "lead.sendProposal" ? PROPOSAL_PREREQUISITE : null;
+}
+
 export const OUTREACH_CHANNELS = ["call", "sms", "email", "in_person"] as const;
 
 export const TERMINAL_REASONS = [

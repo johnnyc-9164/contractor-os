@@ -56,6 +56,7 @@ import {
 import { type PendingTransition, TransitionDialog } from "./transition-dialog";
 import {
 	BOARD_COLUMNS,
+	blockedTransitionReason,
 	DIALOG_FIELDS,
 	isLegalTransition,
 	type LeadStage,
@@ -295,6 +296,13 @@ export function PipelineBoard() {
 		successMove: { lead: PipelineLead; to: LeadStage },
 		successLabel: string,
 	) => {
+		const blockedReason = blockedTransitionReason(contract);
+		if (blockedReason) {
+			setColumns(rollbackTo);
+			toast.error(blockedReason);
+			return;
+		}
+
 		let result: {
 			ok: boolean;
 			blockers?: Array<{ message?: string }>;
@@ -445,6 +453,11 @@ export function PipelineBoard() {
 
 	const handleDialogConfirm = (payload: Record<string, unknown>) => {
 		if (!pending || !pendingMove || !activeColumns) return;
+		const blockedReason = blockedTransitionReason(pending.contract);
+		if (blockedReason) {
+			toast.error(blockedReason);
+			return;
+		}
 
 		const { from, to, lead } = pendingMove;
 		const contract = pending.contract;
