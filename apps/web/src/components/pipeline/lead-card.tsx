@@ -54,10 +54,12 @@ const TERMINAL_TARGETS: LeadStage[] = ["Won", "Lost", "Disqualified"];
 
 export function LeadCard({
 	lead,
+	isPrincipal,
 	onSelect,
 	onTerminalMove,
 }: {
 	lead: PipelineLead;
+	isPrincipal: boolean;
 	onSelect?: (lead: PipelineLead) => void;
 	onTerminalMove?: (lead: PipelineLead, to: LeadStage) => void;
 }) {
@@ -69,7 +71,7 @@ export function LeadCard({
 	return (
 		<Card
 			size="sm"
-			className="transition-colors hover:ring-foreground/20 focus-within:ring-foreground/30"
+			className="transition-colors focus-within:ring-foreground/30 hover:ring-foreground/20"
 		>
 			<CardHeader>
 				<div className="flex min-w-0 items-start gap-2">
@@ -120,18 +122,28 @@ export function LeadCard({
 
 			{onTerminalMove && terminalOptions.length > 0 ? (
 				<CardFooter className="flex-wrap gap-1">
-					{terminalOptions.map((target) => (
-						<Button
-							key={target}
-							type="button"
-							variant="ghost"
-							size="xs"
-							onClick={() => onTerminalMove(lead, target)}
-						>
-							Mark {target}
-							<ArrowRightIcon data-icon="inline-end" />
-						</Button>
-					))}
+					{terminalOptions.map((target) => {
+						const requiresPrincipal =
+							(target === "Awarded" || target === "Won") && !isPrincipal;
+						return (
+							<Button
+								key={target}
+								type="button"
+								variant="ghost"
+								size="xs"
+								disabled={requiresPrincipal}
+								title={
+									requiresPrincipal
+										? `Moving to ${target} requires principal authority`
+										: undefined
+								}
+								onClick={() => onTerminalMove(lead, target)}
+							>
+								Mark {target}
+								<ArrowRightIcon data-icon="inline-end" />
+							</Button>
+						);
+					})}
 				</CardFooter>
 			) : null}
 		</Card>

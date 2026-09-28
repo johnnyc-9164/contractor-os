@@ -616,6 +616,7 @@ export function PipelineBoard() {
 												{hasQuery ? (
 													<LeadCard
 														lead={lead}
+														isPrincipal={isPrincipal}
 														onSelect={(selected) =>
 															setSelectedLeadId(selected.id)
 														}
@@ -625,6 +626,7 @@ export function PipelineBoard() {
 													<KanbanItemHandle>
 														<LeadCard
 															lead={lead}
+															isPrincipal={isPrincipal}
 															onSelect={(selected) =>
 																setSelectedLeadId(selected.id)
 															}
@@ -707,6 +709,7 @@ export function PipelineBoard() {
 												<LeadCard
 													key={lead.id}
 													lead={lead}
+													isPrincipal={isPrincipal}
 													onSelect={(selected) =>
 														setSelectedLeadId(selected.id)
 													}
