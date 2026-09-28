@@ -22,6 +22,7 @@ export default function Header() {
 	const links: { to: Route; label: string }[] = [{ to: "/", label: "Home" }];
 	if (canSeeAdminActions(membership?.role ?? null)) {
 		links.push({ to: "/dashboard", label: "Dashboard" });
+		links.push({ to: "/leads", label: "Leads" });
 	}
 
 	return (
