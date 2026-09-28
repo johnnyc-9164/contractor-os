@@ -12,15 +12,18 @@ export function CreateInvoiceForm({ onCreated }: { onCreated?: () => void }) {
 	const [invoiceNumber, setInvoiceNumber] = useState("");
 	const [invoiceType, setInvoiceType] = useState("");
 	const [amount, setAmount] = useState("");
+	const [dueDate, setDueDate] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [amountError, setAmountError] = useState<string | null>(null);
+	const [dueDateError, setDueDateError] = useState<string | null>(null);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setSubmitting(true);
 		setError(null);
 		setAmountError(null);
+		setDueDateError(null);
 		try {
 			const result = await submitInvoiceDraft(
 				{
@@ -29,11 +32,13 @@ export function CreateInvoiceForm({ onCreated }: { onCreated?: () => void }) {
 					invoiceNumber,
 					invoiceType,
 					amount,
+					dueDate,
 				},
 				createInvoice,
 			);
 			if (!result.ok) {
 				if (result.field === "amount") setAmountError(result.error);
+				else if (result.field === "dueDate") setDueDateError(result.error);
 				else setError(result.error);
 				return;
 			}
@@ -42,6 +47,7 @@ export function CreateInvoiceForm({ onCreated }: { onCreated?: () => void }) {
 			setInvoiceNumber("");
 			setInvoiceType("");
 			setAmount("");
+			setDueDate("");
 			onCreated?.();
 		} catch (err) {
 			setError(
@@ -96,6 +102,30 @@ export function CreateInvoiceForm({ onCreated }: { onCreated?: () => void }) {
 				disabled={submitting}
 				style={inputStyle}
 			/>
+			<label htmlFor="invoice-due-date">Due date (required)</label>
+			<input
+				id="invoice-due-date"
+				type="date"
+				value={dueDate}
+				onChange={(e) => {
+					setDueDate(e.target.value);
+					setDueDateError(null);
+				}}
+				required
+				disabled={submitting}
+				style={inputStyle}
+				aria-invalid={dueDateError ? true : undefined}
+				aria-describedby={dueDateError ? "invoice-due-date-error" : undefined}
+			/>
+			{dueDateError && (
+				<p
+					id="invoice-due-date-error"
+					role="alert"
+					style={{ color: "red", fontSize: "0.875rem" }}
+				>
+					{dueDateError}
+				</p>
+			)}
 			<input
 				type="text"
 				inputMode="decimal"

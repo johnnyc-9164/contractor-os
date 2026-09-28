@@ -7,6 +7,7 @@ const draft = {
 	invoiceNumber: " 1001 ",
 	invoiceType: " final ",
 	amount: "12.34",
+	dueDate: "2026-10-30",
 };
 
 describe("invoice form submission", () => {
@@ -16,6 +17,16 @@ describe("invoice form submission", () => {
 			const mutation = vi.fn().mockResolvedValue(undefined);
 			const result = await submitInvoiceDraft({ ...draft, amount }, mutation);
 			expect(result).toMatchObject({ ok: false, field: "amount" });
+			expect(mutation).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each(["", "2026-02-30", "not-a-date"])(
+		"keeps invalid due date %s out of the mutation",
+		async (dueDate) => {
+			const mutation = vi.fn().mockResolvedValue(undefined);
+			const result = await submitInvoiceDraft({ ...draft, dueDate }, mutation);
+			expect(result).toMatchObject({ ok: false, field: "dueDate" });
 			expect(mutation).not.toHaveBeenCalled();
 		},
 	);
@@ -32,6 +43,7 @@ describe("invoice form submission", () => {
 				invoice_number: "1001",
 				invoice_type: "final",
 				amount: 12.34,
+				due_date: "2026-10-30T00:00:00.000Z",
 			},
 		});
 	});
