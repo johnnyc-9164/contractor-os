@@ -268,7 +268,7 @@ export function CustomerCrm({
 				<Card size="sm">
 					<CardHeader>
 						<CardTitle>Converted customers</CardTitle>
-						<CardDescription>Loaded from Won leads</CardDescription>
+						<CardDescription>Won leads in loaded records</CardDescription>
 						<CardAction className="font-semibold text-2xl tabular-nums">
 							{customers.length}
 						</CardAction>
@@ -282,9 +282,18 @@ export function CustomerCrm({
 					<CardDescription>
 						This view uses won leads until a dedicated account and contact read
 						contract is available.
+						{hasMore
+							? " Search covers loaded leads; more records are available."
+							: null}
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="px-0">
+					{!isInitialLoading ? (
+						<p className="sr-only" role="status">
+							{visibleCustomers.length} matching won leads in loaded records
+							{hasMore ? "; more records are available" : ""}.
+						</p>
+					) : null}
 					{isInitialLoading ? (
 						<CustomerListLoading />
 					) : customers.length === 0 ? (
@@ -293,18 +302,30 @@ export function CustomerCrm({
 								<EmptyMedia variant="icon">
 									<UsersRound aria-hidden="true" />
 								</EmptyMedia>
-								<EmptyTitle>No converted customers yet</EmptyTitle>
+								<EmptyTitle>
+									{hasMore
+										? "No won leads in loaded records"
+										: "No converted customers yet"}
+								</EmptyTitle>
 								<EmptyDescription>
-									Leads marked Won in the live pipeline will appear here.
+									{hasMore
+										? "Load more records to continue looking for won leads."
+										: "Leads marked Won in the live pipeline will appear here."}
 								</EmptyDescription>
 							</EmptyHeader>
 						</Empty>
 					) : visibleCustomers.length === 0 ? (
 						<Empty>
 							<EmptyHeader>
-								<EmptyTitle>No matching customers</EmptyTitle>
+								<EmptyTitle>
+									{hasMore
+										? "No matches in loaded records"
+										: "No matching customers"}
+								</EmptyTitle>
 								<EmptyDescription>
-									Try another lead title or identifier.
+									{hasMore
+										? "Load more records or try another lead title or identifier."
+										: "Try another lead title or identifier."}
 								</EmptyDescription>
 							</EmptyHeader>
 							<EmptyContent>
@@ -340,7 +361,7 @@ export function CustomerCrm({
 							onClick={onLoadMore}
 							variant="outline"
 						>
-							{status === "loading-more" ? "Loading more" : "Load more"}
+							{status === "loading-more" ? "Loading more leads" : "Load more leads"}
 						</Button>
 					</div>
 				) : null}
