@@ -33,7 +33,8 @@ function renderJobs(
 		results,
 		status,
 		loadMore: vi.fn(),
-	} as ReturnType<typeof usePaginatedQuery>);
+		isLoading: status === "LoadingFirstPage" || status === "LoadingMore",
+	} as unknown as ReturnType<typeof usePaginatedQuery>);
 	return renderToStaticMarkup(createElement(JobsPage));
 }
 
