@@ -4,23 +4,25 @@ import { describe, expect, it } from "vitest";
 import schema from "./schema.js";
 
 const modules = import.meta.glob("./**/*.ts");
+type ApprovedEstimateListResult = {
+	page: Array<{
+		estimateKey: string;
+		leadKey: string;
+		version: number;
+		status: "approved";
+		baseTotalCents: number;
+	}>;
+	isDone: boolean;
+	continueCursor: string;
+};
+
 const listApproved = makeFunctionReference<
 	"query",
 	{
 		leadId: string;
 		paginationOpts: { cursor: string | null; numItems: number };
 	},
-	{
-		page: Array<{
-			estimateKey: string;
-			leadKey: string;
-			version: number;
-			status: "approved";
-			baseTotalCents: number;
-		}>;
-		isDone: boolean;
-		continueCursor: string;
-	}
+	ApprovedEstimateListResult
 >("estimateQueries:listApproved");
 
 const COMPANY_A = "co_alpha";
@@ -43,6 +45,7 @@ async function seedCaller(
 		role?: UserRole;
 		userStatus?: string;
 		membershipEnabled?: boolean;
+		membershipTenantId?: string;
 		bindingStatus?: "active" | "superseded" | "revoked";
 	},
 ) {
@@ -78,7 +81,7 @@ async function seedCaller(
 		});
 		await ctx.db.insert("contractorOsMemberships", {
 			tokenIdentifier: options.subject,
-			tenantId: options.companyId,
+			tenantId: options.membershipTenantId ?? options.companyId,
 			enabled: options.membershipEnabled ?? true,
 			role: "viewer",
 		});
@@ -183,6 +186,15 @@ describe("approved estimate query authorization", () => {
 				caller.query(listApproved, firstPage("lead_alpha")),
 			).rejects.toThrow();
 		}
+		const mismatchedTenant = await seedCaller(t, {
+			subject: `${SUBJECT_A}-mismatch`,
+			companyId: COMPANY_A,
+			membershipTenantId: COMPANY_B,
+			userKey: "usr_mismatch",
+		});
+		await expect(
+			mismatchedTenant.query(listApproved, firstPage("lead_alpha")),
+		).rejects.toThrow("company access denied");
 	});
 
 	it("resolves both lead identifiers and returns only the bounded approved projection", async () => {
@@ -261,6 +273,12 @@ describe("approved estimate query authorization", () => {
 			leadKey: "lead_beta",
 			companyId: COMPANY_B,
 			version: 1,
+		});
+		await seedEstimate(t, {
+			key: "est_beta_same_lead_key",
+			leadKey: "lead_alpha",
+			companyId: COMPANY_B,
+			version: 2,
 		});
 
 		expect(
@@ -347,7 +365,7 @@ describe("approved estimate query authorization", () => {
 		let cursor: string | null = null;
 		let isDone = false;
 		while (!isDone) {
-			const result = await caller.query(listApproved, {
+			const result: ApprovedEstimateListResult = await caller.query(listApproved, {
 				leadId: "lead_alpha",
 				paginationOpts: { cursor, numItems: 2 },
 			});
