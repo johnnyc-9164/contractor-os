@@ -41,6 +41,9 @@ export default defineSchema({
 		...provenance,
 		siteIdentifier: v.string(),
 		tenantId: v.string(),
+		enabled: v.optional(v.boolean()),
+		bridgeActorKey: v.optional(v.string()),
+		bridgeActorDisplay: v.optional(v.string()),
 	})
 		.index("by_site", ["siteIdentifier"])
 		.index("by_tenant", ["tenantId"]),
