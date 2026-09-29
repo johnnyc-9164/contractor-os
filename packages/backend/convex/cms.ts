@@ -26,6 +26,8 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 
 const cms = new Cms(components.cms);
+const BRIDGE_ACTOR_KEY = "agt_website_bridge";
+const BRIDGE_ACTOR_DISPLAY = "Website bridge";
 
 async function requireTenant(ctx: QueryCtx | MutationCtx) {
 	const identity = await ctx.auth.getUserIdentity();
@@ -51,6 +53,20 @@ async function requireSiteTenant(
 		.unique();
 	if (!mapping) throw new Error(`unmapped CMS site: ${siteIdentifier}`);
 	if (mapping.tenantId !== tenantId) throw new Error("tenant access denied");
+}
+
+async function requireAdminTenant(ctx: MutationCtx) {
+	const identity = await ctx.auth.getUserIdentity();
+	if (!identity) throw new Error("unauthenticated");
+	const membership = await ctx.db
+		.query("contractorOsMemberships")
+		.withIndex("by_identity", (q) =>
+			q.eq("tokenIdentifier", identity.tokenIdentifier),
+		)
+		.unique();
+	if (!membership?.enabled || membership.role !== "admin")
+		throw new Error("tenant admin access denied");
+	return { tenantId: membership.tenantId, actorId: identity.tokenIdentifier };
 }
 
 // Args below mirror the component's validators explicitly. For full strictness,
@@ -90,6 +106,44 @@ export const createSite = mutation({
 			});
 		}
 		return id;
+	},
+});
+
+export const setPublicIntakeEnabled = mutation({
+	args: {
+		identifier: v.string(),
+		enabled: v.boolean(),
+	},
+	returns: v.object({ enabled: v.boolean() }),
+	handler: async (ctx, args) => {
+		const { tenantId, actorId } = await requireAdminTenant(ctx);
+		const mapping = await ctx.db
+			.query("cmsSiteTenants")
+			.withIndex("by_site", (q) => q.eq("siteIdentifier", args.identifier))
+			.unique();
+		if (!mapping) throw new Error("unmapped CMS site");
+		if (mapping.tenantId !== tenantId) throw new Error("tenant access denied");
+		const site = await cms.site.get(ctx, { identifier: args.identifier });
+		if (!site) throw new Error("unknown CMS site");
+
+		const needsActor =
+			args.enabled &&
+			(mapping.bridgeActorKey !== BRIDGE_ACTOR_KEY ||
+				mapping.bridgeActorDisplay !== BRIDGE_ACTOR_DISPLAY);
+		if ((mapping.enabled === true) !== args.enabled || needsActor) {
+			await ctx.db.patch(mapping._id, {
+				enabled: args.enabled,
+				...(args.enabled
+					? {
+							bridgeActorKey: BRIDGE_ACTOR_KEY,
+							bridgeActorDisplay: BRIDGE_ACTOR_DISPLAY,
+						}
+					: {}),
+				updated_by: actorId,
+				updated_at: new Date().toISOString(),
+			});
+		}
+		return { enabled: args.enabled };
 	},
 });
 
