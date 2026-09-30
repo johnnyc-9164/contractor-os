@@ -1,5 +1,6 @@
+import { SiteNamespace } from "@johnnyc2026/cms";
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import cmsSchema from "../node_modules/@johnnyc2026/cms/src/component/schema.js";
 import { api } from "./_generated/api.js";
 import schema from "./schema.js";
@@ -46,6 +47,45 @@ const siteArgs = (identifier: string, idempotencyKey?: string) => ({
 });
 
 describe("CMS facade tenant isolation", () => {
+	it("fills owned pages and advances cursors across interleaved tenants", async () => {
+		const t = setup();
+		const tenantA = await addTenant(t, "issuer|alice", "tenant-a");
+		const tenantB = await addTenant(t, "issuer|bob", "tenant-b");
+		for (const [tenant, identifier] of [
+			[tenantB, "bravo-1"],
+			[tenantA, "alpha-1"],
+			[tenantB, "bravo-2"],
+			[tenantA, "alpha-2"],
+			[tenantB, "bravo-3"],
+			[tenantA, "alpha-3"],
+		] as const) {
+			await tenant.mutation(api.cms.createSite, siteArgs(identifier));
+		}
+		const first = await tenantA.query(api.cms.listSites, {
+			paginationOpts: { numItems: 2, cursor: null },
+		});
+		expect(
+			first.page.map((site: { identifier: string }) => site.identifier),
+		).toEqual(["alpha-1", "alpha-2"]);
+		expect(first.isDone).toBe(false);
+		const second = await tenantA.query(api.cms.listSites, {
+			paginationOpts: { numItems: 2, cursor: first.continueCursor },
+		});
+		expect(
+			second.page.map((site: { identifier: string }) => site.identifier),
+		).toEqual(["alpha-3"]);
+		expect(second.isDone).toBe(true);
+		expect(
+			[...first.page, ...second.page].map((site) => site.identifier),
+		).toEqual(["alpha-1", "alpha-2", "alpha-3"]);
+		const b = await tenantB.query(api.cms.listSites, {
+			paginationOpts: { numItems: 2, cursor: null },
+		});
+		expect(
+			b.page.map((site: { identifier: string }) => site.identifier),
+		).toEqual(["bravo-1", "bravo-2"]);
+	});
+
 	it("allows same-tenant create, read, list, and update", async () => {
 		const t = setup();
 		const tenant = await addTenant(t, "issuer|alice", "tenant-a");
@@ -91,14 +131,31 @@ describe("CMS facade tenant isolation", () => {
 		const t = setup();
 		const tenantA = await addTenant(t, "issuer|alice", "tenant-a");
 		const tenantB = await addTenant(t, "issuer|bob", "tenant-b");
-		await tenantA.mutation(
+		const ownedId = await tenantA.mutation(
 			api.cms.createSite,
 			siteArgs("alpha", "create-alpha"),
 		);
-
-		await expect(
-			tenantB.mutation(api.cms.createSite, siteArgs("alpha", "create-alpha")),
-		).rejects.toThrow();
+		const create = vi.spyOn(SiteNamespace.prototype, "create");
+		try {
+			await expect(
+				tenantB.mutation(api.cms.createSite, siteArgs("alpha", "create-alpha")),
+			).rejects.toThrow("tenant access denied");
+			expect(create).not.toHaveBeenCalled();
+		} finally {
+			create.mockRestore();
+		}
+		expect(
+			await tenantA.mutation(
+				api.cms.createSite,
+				siteArgs("alpha", "create-alpha"),
+			),
+		).toBe(ownedId);
+		expect(
+			(await tenantA.query(api.cms.getSite, { identifier: "alpha" }))?.revision,
+		).toBe(1);
+		expect(
+			(await tenantB.query(api.cms.listSites, { paginationOpts })).page,
+		).toEqual([]);
 	});
 
 	it("rejects unauthenticated access to all four operations", async () => {

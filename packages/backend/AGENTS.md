@@ -20,12 +20,14 @@ holds the local schema, auth config, and facade modules.
   enabled membership for the caller's token identity; `requireSiteTenant`
   rejects missing mappings and mappings owned by another tenant before
   reads/updates. `convex/cms.isolation.test.ts` covers same-tenant create/read/
-  list/update, cross-tenant read/write rejection and list filtering, an
-  idempotent cross-tenant create replay, and unauthenticated calls. These are
+  list/update, cross-tenant read/write rejection, tenant-scoped list pagination,
+  an idempotent cross-tenant create replay, and unauthenticated calls. These are
   `convex-test` unit tests with mocked identities, not production runtime
-  security proof. Two limitations remain: `createSite` calls component
-  creation before validating an existing ownership mapping (GH-59), and
-  `listSites` filters the component-wide page after pagination (GH-64).
+  security proof. `listSites` paginates tenant-indexed site mappings before
+  resolving the corresponding component sites, keeping page size and cursors
+  tenant-scoped. `createSite` checks ownership before invoking the component;
+  a foreign mapped site cannot reach its create operation, while a same-tenant
+  idempotent replay is retained.
 
 ## Rules
 

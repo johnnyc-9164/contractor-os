@@ -66,8 +66,6 @@ export const createSite = mutation({
 	},
 	handler: async (ctx, args) => {
 		const tenantId = await requireTenant(ctx);
-		// returns the new record id as an opaque string
-		const id = await cms.site.create(ctx, args);
 		const mapping = await ctx.db
 			.query("cmsSiteTenants")
 			.withIndex("by_site", (q) => q.eq("siteIdentifier", args.identifier))
@@ -75,6 +73,8 @@ export const createSite = mutation({
 		if (mapping && mapping.tenantId !== tenantId) {
 			throw new Error("tenant access denied");
 		}
+		// Check ownership before the component sees even an idempotent replay.
+		const id = await cms.site.create(ctx, args);
 		if (!mapping) {
 			const now = new Date().toISOString();
 			await ctx.db.insert("cmsSiteTenants", {
@@ -109,14 +109,18 @@ export const listSites = query({
 		const mappings = await ctx.db
 			.query("cmsSiteTenants")
 			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
-			.collect();
-		const identifiers = new Set(mappings.map((row) => row.siteIdentifier));
-		const result = await cms.site.list(ctx, args);
-		// Filtering happens after component pagination, so a page may contain fewer
-		// than numItems and callers may need to continue to find more tenant sites.
+			.paginate(args.paginationOpts);
+		const page = await Promise.all(
+			mappings.page.map(async ({ siteIdentifier }) => {
+				const site = await cms.site.get(ctx, { identifier: siteIdentifier });
+				if (!site) throw new Error("mapped CMS site is missing");
+				return site;
+			}),
+		);
 		return {
-			...result,
-			page: result.page.filter((site) => identifiers.has(site.identifier)),
+			page,
+			isDone: mappings.isDone,
+			continueCursor: mappings.continueCursor,
 		};
 	},
 });
