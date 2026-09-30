@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
 	assertMatchingSha,
@@ -32,7 +33,7 @@ describe("verifyPreviewDeployment", () => {
 		});
 		expect(fetcher).toHaveBeenCalledWith(
 			new URL("https://contractoros-git-cos-65-johnnyc.vercel.app/api/health"),
-			expect.objectContaining({ redirect: "error" }),
+			expect.objectContaining({ redirect: "manual" }),
 		);
 	});
 
@@ -93,7 +94,11 @@ describe("verifyPreviewDeployment", () => {
 
 		await expect(
 			verifyPreviewDeployment(
-				{ ...input, previewUrl: "https://attacker.example" },
+				{
+					...input,
+					previewUrl: "https://attacker.example",
+					protectionBypassSecret: "test-bypass-value",
+				},
 				fetcher,
 			),
 		).rejects.toThrow(
@@ -109,5 +114,69 @@ describe("verifyPreviewDeployment", () => {
 		await expect(
 			verifyPreviewDeployment({ ...input, previewUrl: "" }),
 		).rejects.toThrow("Preview URL is required");
+	});
+});
+
+describe("deployment workflow integration", () => {
+	it("retains production CD jobs while adding Preview verification", () => {
+		const workflow = readFileSync(
+			new URL("../../.github/workflows/cd.yml", import.meta.url),
+			"utf8",
+		);
+		expect(workflow).toMatch(/push:\s*\n\s*branches:\s*\[master\]/u);
+		expect(workflow).toContain("        options:\n          - preview");
+		expect(workflow).not.toContain("          - production");
+		expect(workflow).not.toContain("default: production");
+		for (const job of [
+			"deploy-convex",
+			"deploy-vercel",
+			"smoke",
+			"deploy-marketing",
+			"smoke-marketing",
+		]) {
+			expect(workflow).toContain(
+				`  ${job}:\n    if: \${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}`,
+			);
+		}
+		expect(workflow).toMatch(
+			/ {2}verify-preview:\n {4}if: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.target == 'preview' \}\}/u,
+		);
+		expect(workflow).toContain("      deployments: read");
+		expect(workflow).toContain(
+			'if [[ ! "$PREVIEW_URL" =~ ^https://contractoros-[a-z0-9-]+-johnnyc\\.vercel\\.app/?$ ]]; then',
+		);
+		expect(workflow).toContain('-f sha="$EXPECTED_SHA"');
+		expect(workflow).toContain("-f environment='Preview – contractoros'");
+		expect(workflow).toContain('if [ "$status_url" = "$PREVIEW_URL" ]; then');
+	});
+});
+
+describe("Preview protection bypass", () => {
+	it("sends the Vercel bypass secret only to the allowlisted Preview host", async () => {
+		const fetcher = vi.fn(async () => health(EXPECTED_SHA));
+		await verifyPreviewDeployment(
+			{ ...input, protectionBypassSecret: "test-bypass-value" },
+			fetcher,
+		);
+		expect(fetcher).toHaveBeenCalledWith(
+			new URL("https://contractoros-git-cos-65-johnnyc.vercel.app/api/health"),
+			expect.objectContaining({
+				headers: {
+					accept: "application/json",
+					"x-vercel-protection-bypass": "test-bypass-value",
+				},
+				redirect: "manual",
+			}),
+		);
+	});
+
+	it("reports a protected Preview without leaking the bypass secret", async () => {
+		const fetcher = vi.fn(async () => new Response(null, { status: 302 }));
+		await expect(
+			verifyPreviewDeployment(
+				{ ...input, protectionBypassSecret: "test-bypass-value" },
+				fetcher,
+			),
+		).rejects.toThrow(/Vercel Deployment Protection/u);
 	});
 });
