@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
 	assertMatchingSha,
+	assertSignedOutRedirect,
 	verifyPreviewDeployment,
 } from "./preview-deployment";
 
@@ -139,15 +140,77 @@ describe("deployment workflow integration", () => {
 			);
 		}
 		expect(workflow).toMatch(
-			/ {2}verify-preview:\n {4}if: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.target == 'preview' \}\}/u,
+			/ {2}verify-preview:\n {4}if: \$\{\{ github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/master' && inputs\.target == 'preview' \}\}/u,
 		);
+		expect(workflow).toContain("    environment: preview-certification");
+		expect(workflow).toMatch(/ref: \$\{\{ github\.sha \}\}/u);
+		expect(workflow).toContain("          persist-credentials: false");
+		expect(workflow).toMatch(
+			/VERCEL_AUTOMATION_BYPASS_SECRET: \$\{\{ secrets\.VERCEL_PREVIEW_CERT_BYPASS_SECRET \}\}/u,
+		);
+		expect(workflow).not.toMatch(/secrets\.VERCEL_AUTOMATION_BYPASS_SECRET/u);
+		expect(workflow).toContain("      pr_number:");
+		expect(workflow).toContain(
+			'gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER"',
+		);
+		const productionSmoke = workflow.split("  deploy-marketing:")[0];
+		const previewGate = workflow.split("  verify-preview:")[1];
+		expect(productionSmoke).toContain('case "$location" in');
+		expect(previewGate).toContain("--assert-signed-out-redirect");
+		expect(previewGate).not.toContain("*clerk.accounts.dev*/handshake*");
 		expect(workflow).toContain("      deployments: read");
+		expect(workflow).toContain("      pull-requests: read");
 		expect(workflow).toContain(
 			'if [[ ! "$PREVIEW_URL" =~ ^https://contractoros-[a-z0-9-]+-johnnyc\\.vercel\\.app/?$ ]]; then',
 		);
 		expect(workflow).toContain('-f sha="$EXPECTED_SHA"');
 		expect(workflow).toContain("-f environment='Preview – contractoros'");
-		expect(workflow).toContain('if [ "$status_url" = "$PREVIEW_URL" ]; then');
+		expect(workflow).toContain(
+			`if [ "\${status_url%/}" = "\${PREVIEW_URL%/}" ]; then`,
+		);
+	});
+});
+
+describe("signed-out redirect boundary", () => {
+	const preview = "https://contractoros-git-cos-65-johnnyc.vercel.app";
+	it("accepts only Preview sign-in and the exact observed Clerk handshake", () => {
+		expect(() =>
+			assertSignedOutRedirect(307, `${preview}/sign-in`, preview),
+		).not.toThrow();
+		expect(() =>
+			assertSignedOutRedirect(
+				307,
+				"/sign-in?redirect_url=%2Fdashboard",
+				preview,
+			),
+		).not.toThrow();
+		expect(() =>
+			assertSignedOutRedirect(
+				307,
+				"https://ideal-bullfrog-9796.clerk.accounts.dev/v1/client/handshake?__clerk_hs_reason=dev-browser-missing",
+				preview,
+			),
+		).not.toThrow();
+	});
+	it.each([
+		"https://evil.example/sign-in",
+		"https://ideal-bullfrog-9796.clerk.accounts.dev.evil.example/v1/client/handshake?__clerk_hs_reason=dev-browser-missing",
+		"https://other.clerk.accounts.dev/v1/client/handshake?__clerk_hs_reason=dev-browser-missing",
+		"https://ideal-bullfrog-9796.clerk.accounts.dev/other?__clerk_hs_reason=dev-browser-missing",
+		"https://ideal-bullfrog-9796.clerk.accounts.dev/v1/client/handshake?__clerk_hs_reason=other",
+		"https://contractoros-git-cos-65-johnnyc.vercel.app.evil.example/sign-in",
+	])("rejects external or lookalike destination %s", (location) => {
+		expect(() => assertSignedOutRedirect(307, location, preview)).toThrow(
+			"Signed-out dashboard redirect target is not trusted",
+		);
+	});
+	it("requires an actual redirect status and destination", () => {
+		expect(() =>
+			assertSignedOutRedirect(200, `${preview}/sign-in`, preview),
+		).toThrow("Signed-out dashboard did not redirect");
+		expect(() => assertSignedOutRedirect(307, "", preview)).toThrow(
+			"Signed-out dashboard redirect target is not trusted",
+		);
 	});
 });
 

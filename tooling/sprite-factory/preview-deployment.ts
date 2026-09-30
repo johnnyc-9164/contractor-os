@@ -66,6 +66,41 @@ function previewOrigin(value: string): string {
 	return url.origin;
 }
 
+const CLERK_DEV_HANDSHAKE_ORIGIN =
+	"https://ideal-bullfrog-9796.clerk.accounts.dev";
+
+export function assertSignedOutRedirect(
+	status: number,
+	location: string,
+	previewUrl: string,
+): void {
+	if (![301, 302, 303, 307, 308].includes(status)) {
+		throw new Error(`Signed-out dashboard did not redirect (HTTP ${status})`);
+	}
+	if (!location) {
+		throw new Error("Signed-out dashboard redirect target is not trusted");
+	}
+	let target: URL;
+	try {
+		target = new URL(location, previewOrigin(previewUrl));
+	} catch {
+		throw new Error("Signed-out dashboard redirect target is not trusted");
+	}
+	if (target.protocol !== "https:" || target.username || target.password) {
+		throw new Error("Signed-out dashboard redirect target is not trusted");
+	}
+	const appSignIn =
+		target.origin === previewOrigin(previewUrl) &&
+		(target.pathname === "/sign-in" || target.pathname.startsWith("/sign-in/"));
+	const clerkHandshake =
+		target.origin === CLERK_DEV_HANDSHAKE_ORIGIN &&
+		target.pathname === "/v1/client/handshake" &&
+		target.searchParams.get("__clerk_hs_reason") === "dev-browser-missing";
+	if (!appSignIn && !clerkHandshake) {
+		throw new Error("Signed-out dashboard redirect target is not trusted");
+	}
+}
+
 export async function verifyPreviewDeployment(
 	input: PreviewVerificationInput,
 	fetcher: typeof fetch = fetch,
@@ -158,6 +193,17 @@ function argument(args: string[], flag: string): string | undefined {
 }
 
 export async function runPreviewDeploymentCli(args = process.argv.slice(2)) {
+	if (args.includes("--assert-signed-out-redirect")) {
+		assertSignedOutRedirect(
+			Number(argument(args, "--status")),
+			argument(args, "--redirect-url") ?? "",
+			argument(args, "--preview-url") ?? "",
+		);
+		process.stdout.write(
+			"Signed-out dashboard redirects to a trusted auth destination\n",
+		);
+		return;
+	}
 	const result = await verifyPreviewDeployment({
 		target: argument(args, "--target") ?? "",
 		previewUrl: argument(args, "--preview-url") ?? "",
