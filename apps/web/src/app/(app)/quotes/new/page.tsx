@@ -4,6 +4,7 @@ import { Button } from "@contractor-os/ui/components/button";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { QuotePresentation } from "@/components/paint-os/presentations";
 import { QuoteWizardGuard } from "@/components/quotes/quote-wizard";
 
 function NewQuoteContent() {
@@ -29,14 +30,16 @@ function NewQuoteContent() {
 
 export default function NewQuotePage() {
 	return (
-		<Suspense
-			fallback={
-				<p className="py-24 text-center text-muted-foreground text-sm">
-					Loading…
-				</p>
-			}
-		>
-			<NewQuoteContent />
-		</Suspense>
+		<QuotePresentation>
+			<Suspense
+				fallback={
+					<p className="py-24 text-center text-muted-foreground text-sm">
+						Loading…
+					</p>
+				}
+			>
+				<NewQuoteContent />
+			</Suspense>
+		</QuotePresentation>
 	);
 }

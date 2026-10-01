@@ -21,6 +21,7 @@ import {
 	KanbanOverlay,
 } from "./kanban";
 import { LeadCard, type PipelineLead } from "./lead-card";
+import { toLeadStage } from "./lead-stage-normalization";
 import { type PendingTransition, TransitionDialog } from "./transition-dialog";
 import {
 	BOARD_COLUMNS,
@@ -39,15 +40,6 @@ interface HistoryEvent {
 	identifier: string;
 	actorId: string;
 	occurredAt: number;
-}
-
-function toLeadStage(state: string): LeadStage | null {
-	// listLeads returns display-name stages; accept both forms defensively.
-	const normalized = state.trim();
-	const all: LeadStage[] = [...BOARD_COLUMNS, ...TERMINAL_STAGES];
-	return (all as string[]).includes(normalized)
-		? (normalized as LeadStage)
-		: null;
 }
 
 export function PipelineBoard() {

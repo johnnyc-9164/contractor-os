@@ -9,8 +9,10 @@ import {
 	Unauthenticated,
 	useQuery,
 } from "convex/react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { LeadDrawer } from "../../../components/leads/lead-drawer";
+import { LeadWorkspacePresentation } from "../../../components/paint-os/presentations";
 import { displayStage, nextStage, stageGroup } from "./lead-stages";
 
 type Lead = {
@@ -162,6 +164,14 @@ function LeadList() {
 											<div className="mt-1 font-mono text-muted-foreground text-xs">
 												{lead.identifier}
 											</div>
+											<Link
+												href={`/leads/${encodeURIComponent(lead.identifier)}`}
+												aria-label={`Open details for ${lead.title || lead.identifier}`}
+												className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+												onClick={(event) => event.stopPropagation()}
+											>
+												Open details
+											</Link>
 										</td>
 										<td className="px-4 py-4">
 											<span className="inline-flex rounded-full bg-secondary px-2.5 py-1 font-medium text-secondary-foreground text-xs">
@@ -213,20 +223,15 @@ export default function LeadsPage() {
 	return (
 		<>
 			<Authenticated>
-				<main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-					<header className="mb-6 flex items-start justify-between gap-4">
-						<div>
-							<h1 className="font-semibold text-2xl tracking-tight">Leads</h1>
-							<p className="mt-1 text-muted-foreground text-sm">
-								See where every lead stands and what comes next.
-							</p>
-						</div>
-						<UserButton />
-					</header>
-					<section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+				<LeadWorkspacePresentation
+					title="Leads"
+					description="See where every lead stands and what comes next."
+					actions={<UserButton />}
+				>
+					<section className="paint-os-live-card paint-os-lead-list">
 						<LeadList />
 					</section>
-				</main>
+				</LeadWorkspacePresentation>
 			</Authenticated>
 			<Unauthenticated>
 				<main className="mx-auto max-w-lg px-6 py-24 text-center">

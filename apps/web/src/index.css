@@ -1,1 +1,3 @@
+@layer theme, base, paintpro, components, utilities;
 @import "@contractor-os/ui/globals.css";
+@import "./components/paint-os/styles/assembly.css";

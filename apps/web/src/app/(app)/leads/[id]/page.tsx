@@ -11,6 +11,7 @@ import {
 } from "convex/react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
+import { LeadWorkspacePresentation } from "../../../../components/paint-os/presentations";
 import { displayStage } from "../lead-stages";
 
 type ProjectionValue = unknown;
@@ -262,9 +263,9 @@ export default function LeadDetailPage() {
 	return (
 		<>
 			<Authenticated>
-				<main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+				<LeadWorkspacePresentation title="Lead details">
 					<Detail />
-				</main>
+				</LeadWorkspacePresentation>
 			</Authenticated>
 			<Unauthenticated>
 				<main className="mx-auto max-w-lg px-6 py-24 text-center">

@@ -4,6 +4,7 @@
 
 import { SignInButton } from "@clerk/nextjs";
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
+import { LeadWorkspacePresentation } from "../../../components/paint-os/presentations";
 import { PipelineBoard } from "../../../components/pipeline/pipeline-board";
 
 export default function PipelinePage() {
@@ -26,13 +27,12 @@ export default function PipelinePage() {
 				</div>
 			</Unauthenticated>
 			<Authenticated>
-				<div className="px-4 py-6 sm:px-6">
-					<h1 className="mb-1 font-semibold text-xl">Pipeline</h1>
-					<p className="mb-6 text-muted-foreground text-sm">
-						The painting lead lifecycle, from prospect to signed job.
-					</p>
+				<LeadWorkspacePresentation
+					title="Leads Pipeline"
+					description="The painting lead lifecycle, from prospect to signed job."
+				>
 					<PipelineBoard />
-				</div>
+				</LeadWorkspacePresentation>
 			</Authenticated>
 		</>
 	);

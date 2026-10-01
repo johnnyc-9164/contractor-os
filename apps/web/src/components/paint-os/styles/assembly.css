@@ -1,0 +1,266 @@
+@import "./source-reference.css" layer(paintpro);
+
+/* Preserve the supplied light palette; dark mode inherits the host's tokens. */
+:root:not(.dark)
+:is(.paint-os-assembly, [data-paintpro-root], [data-paint-os-theme]) {
+	--background: #f7f9fb;
+	--foreground: #191c1e;
+	--card: #ffffff;
+	--card-foreground: #191c1e;
+	--popover: #ffffff;
+	--popover-foreground: #191c1e;
+	--primary: #003ec7;
+	--primary-foreground: #ffffff;
+	--secondary: #dae2fd;
+	--secondary-foreground: #3f465c;
+	--muted: #eceef0;
+	--muted-foreground: #434656;
+	--accent: #e6e8ea;
+	--accent-foreground: #191c1e;
+	--destructive: #ba1a1a;
+	--destructive-foreground: #ffffff;
+	--border: #c3c5d9;
+	--input: #c3c5d9;
+	--ring: #003ec7;
+}
+[data-paintpro-root],
+[data-paint-os-theme] {
+	--radius: 0.5rem;
+	font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Source utilities use their own names, but share the existing host dark palette. */
+.dark :is([data-paintpro-root], [data-paint-os-theme]) {
+	--pp-color-surface-container: var(--muted);
+	/* The source uses on-secondary for card surfaces and avatar borders. */
+	--pp-color-on-secondary: var(--card);
+	--pp-color-on-tertiary-fixed-variant: var(--secondary-foreground);
+	--pp-color-tertiary-fixed: var(--secondary);
+	--pp-color-background: var(--background);
+	--pp-color-secondary-fixed-dim: var(--secondary);
+	--pp-color-on-surface-variant: var(--muted-foreground);
+	--pp-color-on-secondary-fixed: var(--secondary-foreground);
+	--pp-color-on-surface: var(--foreground);
+	--pp-color-outline-variant: var(--border);
+	--pp-color-primary-container: var(--primary);
+	--pp-color-primary: var(--primary);
+	--pp-color-tertiary: var(--secondary);
+	--pp-color-surface-tint: var(--primary);
+	--pp-color-outline: var(--border);
+	--pp-color-on-primary-fixed: var(--primary-foreground);
+	--pp-color-surface-container-highest: var(--accent);
+	--pp-color-on-background: var(--foreground);
+	--pp-color-on-secondary-container: var(--secondary-foreground);
+	--pp-color-primary-fixed: var(--primary);
+	--pp-color-surface-container-high: var(--accent);
+	--pp-color-on-error-container: var(--primary-foreground);
+	--pp-color-inverse-on-surface: var(--background);
+	--pp-color-surface-dim: var(--muted);
+	--pp-color-secondary-container: var(--secondary);
+	--pp-color-surface-container-lowest: var(--card);
+	--pp-color-on-primary-container: var(--primary-foreground);
+	--pp-color-primary-fixed-dim: var(--primary);
+	--pp-color-on-primary-fixed-variant: var(--primary-foreground);
+	--pp-color-on-primary: var(--primary-foreground);
+	--pp-color-error: var(--destructive);
+	--pp-color-tertiary-container: var(--secondary);
+	--pp-color-on-tertiary-container: var(--secondary-foreground);
+	--pp-color-error-container: var(--destructive);
+	--pp-color-surface-container-low: var(--card);
+	--pp-color-surface: var(--background);
+	--pp-color-on-error: var(--primary-foreground);
+	--pp-color-surface-variant: var(--muted);
+	--pp-color-on-secondary-fixed-variant: var(--secondary-foreground);
+	--pp-color-surface-bright: var(--background);
+	--pp-color-inverse-surface: var(--foreground);
+	--pp-color-secondary: var(--muted-foreground);
+	--pp-color-on-tertiary-fixed: var(--secondary-foreground);
+}
+.paint-os-icon {
+	display: inline-block;
+	width: 1.25em;
+	height: 1.25em;
+	flex-shrink: 0;
+	vertical-align: middle;
+}
+@layer components {
+	[data-paintpro-root] *,
+	[data-paintpro-root] *::before,
+	[data-paintpro-root] *::after {
+		border-color: var(--border);
+	}
+}
+[data-paintpro-root] [data-paint-os-region="source-card"] {
+	gap: 0;
+	padding-block: 0;
+}
+[data-paintpro-root] [data-slot="button"]:disabled {
+	cursor: not-allowed;
+}
+
+/* Integration-only adjustments: the host owns navigation and the live slots. */
+.paint-os-assembly {
+	min-width: 0;
+	background: var(--background);
+	color: var(--foreground);
+}
+.paint-os-review-notice {
+	margin: 1rem 2rem 0;
+	padding: 1rem 1.25rem;
+	border: 1px solid var(--border);
+	border-radius: 0.75rem;
+	background: var(--card);
+	color: var(--card-foreground);
+	font-size: 0.875rem;
+}
+.paint-os-review-notice p {
+	margin-top: 0.25rem;
+	max-width: 90ch;
+	line-height: 1.5;
+}
+.paint-os-existing-work {
+	max-width: 1264px;
+	margin: 0 auto;
+	padding: 0 2rem 2rem;
+}
+.paint-os-workspace-heading,
+.paint-os-page-header {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	align-items: center;
+	gap: 1rem;
+}
+.paint-os-workspace-heading {
+	margin-bottom: 1.5rem;
+}
+.paint-os-workspace-heading h2 {
+	font-size: 1.5rem;
+	font-weight: 600;
+}
+.paint-os-page-header {
+	padding: 1.5rem 2rem;
+	border-bottom: 1px solid var(--border);
+	background: var(--card);
+}
+.paint-os-page-header h1 {
+	font-size: 1.75rem;
+	font-weight: 600;
+	line-height: 1.2;
+}
+.paint-os-page-header p {
+	margin-top: 0.375rem;
+	color: var(--muted-foreground);
+}
+.paint-os-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
+.paint-os-header-actions nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+}
+.paint-os-page-header a {
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+	color: var(--primary);
+	text-decoration: underline;
+	text-underline-offset: 4px;
+}
+.paint-os-live-content {
+	min-width: 0;
+	padding: 2rem;
+}
+.paint-os-form-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+	gap: 1.5rem;
+}
+.paint-os-live-card {
+	min-width: 0;
+	padding: 1.5rem;
+	margin-bottom: 1.5rem;
+	background: var(--card);
+	border: 1px solid var(--border);
+	border-radius: 0.75rem;
+}
+.paint-os-live-list {
+	padding: 1rem 1.5rem;
+}
+.paint-os-live-list h2 {
+	margin-bottom: 1rem;
+	font-size: 1.125rem;
+	font-weight: 600;
+}
+.paint-os-live-list li {
+	padding: 0.75rem 0;
+	overflow-wrap: anywhere;
+	border-bottom: 1px solid var(--muted);
+}
+.paint-os-lead-list {
+	padding: 0;
+	overflow: hidden;
+}
+.paint-os-lead-workspace [data-paintpro-screen="S36"] > section {
+	padding-right: 0;
+	height: auto;
+	overflow: visible;
+	min-width: 0;
+}
+.paint-os-quote-workspace [data-paintpro-screen="S12"] > section {
+	min-height: 0;
+}
+.paint-os-assembly [data-paintpro-root] [data-slot="card"] {
+	border-radius: 0.75rem;
+	box-shadow: 0 1px 3px #191c1e0d;
+	font-size: 1rem;
+	line-height: 1.5;
+}
+.paint-os-assembly [data-paintpro-root] [data-slot="card-title"] {
+	font-size: 1.5rem;
+	font-weight: 600;
+}
+.paint-os-assembly [data-paintpro-root] [data-slot="button"] {
+	border-radius: 0.5rem;
+	font-size: 0.875rem;
+	min-height: 40px;
+	height: auto;
+	white-space: normal;
+}
+.paint-os-assembly [data-paintpro-root] [data-slot="card-header"] {
+	grid-template-rows: none;
+}
+.paint-os-assembly :focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 3px;
+}
+
+@media (max-width: 767px) {
+	.paint-os-review-notice {
+		margin: 1rem;
+	}
+	.paint-os-existing-work,
+	.paint-os-live-content {
+		padding: 1rem;
+	}
+	.paint-os-page-header {
+		padding: 1.25rem 1rem;
+	}
+	.paint-os-assembly [data-paintpro-screen="S37"] > section {
+		padding: 1rem;
+	}
+	.paint-os-assembly [data-paintpro-screen="S37"] header {
+		flex-wrap: wrap;
+		align-items: start;
+		gap: 1rem;
+	}
+	.paint-os-assembly [data-paintpro-screen="S37"] [data-slot="card"] {
+		min-width: 0;
+	}
+	.paint-os-assembly [data-paintpro-screen="S37"] [data-slot="card-title"] {
+		font-size: 1.25rem;
+	}
+}
