@@ -1,11 +1,12 @@
 "use client";
 import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
-import { api } from "@contractor-os/backend/convex/_generated/api";
 import { Button } from "@contractor-os/ui/components/button";
-import { useQuery } from "convex/react";
 import type { Route } from "next";
 import Link from "next/link";
-import type { MembershipRole } from "./membership-provider";
+import {
+	type MembershipRole,
+	useWorkspaceMembership,
+} from "./membership-provider";
 import { ModeToggle } from "./mode-toggle";
 
 export function canSeeAdminActions(role: MembershipRole | null): boolean {
@@ -14,9 +15,14 @@ export function canSeeAdminActions(role: MembershipRole | null): boolean {
 
 export default function Header() {
 	const { isSignedIn } = useAuth();
-	const membership = useQuery(api.memberships.get, isSignedIn ? {} : "skip");
+	const { membership } = useWorkspaceMembership();
 	const links: { to: Route; label: string }[] = [{ to: "/", label: "Home" }];
-	if (canSeeAdminActions(membership?.role ?? null)) {
+	if (
+		membership &&
+		!(membership instanceof Error) &&
+		membership.enabled &&
+		canSeeAdminActions(membership.role)
+	) {
 		links.push({ to: "/dashboard", label: "Dashboard" });
 	}
 
