@@ -6,6 +6,7 @@
 import { Dialog } from "radix-ui";
 import { useState } from "react";
 import {
+	blockedTransitionReason,
 	type DialogField,
 	FIELD_LABELS,
 	OUTREACH_CHANNELS,
@@ -42,6 +43,7 @@ export function TransitionDialog({
 	const [error, setError] = useState<string | null>(null);
 
 	if (!pending) return null;
+	const blockedReason = blockedTransitionReason(pending.contract);
 
 	const set = (field: string, value: string) => {
 		setValues((v) => ({ ...v, [field]: value }));
@@ -49,6 +51,7 @@ export function TransitionDialog({
 	};
 
 	const handleConfirm = () => {
+		if (blockedReason) return;
 		const payload: Record<string, unknown> = { lead_id: pending.leadId };
 		for (const field of pending.fields) {
 			const raw = (values[field] ?? "").trim();
@@ -246,16 +249,19 @@ export function TransitionDialog({
 				<Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
 				<Dialog.Content className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-card p-6 shadow-lg">
 					<Dialog.Title className="font-semibold text-lg">
-						Move to {pending.to}
+						{blockedReason ? "Cannot move to" : "Move to"} {pending.to}
 					</Dialog.Title>
 					<Dialog.Description className="mt-1 text-muted-foreground text-sm">
-						{pending.leadTitle} — {pending.from} to {pending.to}. Fill in the
-						required details to complete the move.
+						{pending.leadTitle} — {pending.from} to {pending.to}.{" "}
+						{blockedReason ??
+							"Fill in the required details to complete the move."}
 					</Dialog.Description>
-					<div className="mt-4 space-y-3">
-						{pending.fields.map(renderField)}
-					</div>
-					{error && (
+					{blockedReason ? null : (
+						<div className="mt-4 space-y-3">
+							{pending.fields.map(renderField)}
+						</div>
+					)}
+					{!blockedReason && error && (
 						<p className="mt-3 text-destructive text-sm" role="alert">
 							{error}
 						</p>
@@ -266,15 +272,17 @@ export function TransitionDialog({
 							onClick={onCancel}
 							className="rounded-md border border-input px-4 py-2 text-sm hover:bg-muted"
 						>
-							Cancel
+							{blockedReason ? "Close" : "Cancel"}
 						</button>
-						<button
-							type="button"
-							onClick={handleConfirm}
-							className="rounded-md bg-primary px-4 py-2 text-primary-foreground text-sm hover:bg-primary/90"
-						>
-							Confirm move
-						</button>
+						{blockedReason ? null : (
+							<button
+								type="button"
+								onClick={handleConfirm}
+								className="rounded-md bg-primary px-4 py-2 text-primary-foreground text-sm hover:bg-primary/90"
+							>
+								Confirm move
+							</button>
+						)}
 					</div>
 				</Dialog.Content>
 			</Dialog.Portal>
