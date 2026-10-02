@@ -1,94 +1,137 @@
 # Symphony factory contract
 
-This contract sits between Symphony and every Codex worker. Symphony owns
-dispatch, retries, and workspace isolation. GitHub Issues own work state; GitHub
-pull requests own review, CI, and the merge boundary. The repository owns the
-implementation policy, deterministic gates, and proof.
+This contract separates worker execution from controller authority. Symphony
+dispatches one approved issue to one Sprite workspace. The worker implements and
+runs deterministic checks. The controller owns GitHub mutations, independent
+review, CI interpretation, merge, and deployment.
 
-## Authority and state
+## Admission and authority
 
-Read `docs/factory/CHARTER.md` before acting. The live task is the GitHub issue
-supplied by Symphony plus its single `## Codex Workpad` comment. The GitHub PR is
-the review handoff. Markdown snapshots are informative, never coordination locks.
+An issue is dispatchable only when it is open and has both:
 
-Queue-state labels:
+- `symphony-ready`: the controller admits it to Symphony;
+- `contract-approved`: the controller verified bounded acceptance criteria,
+  dependencies, assigned Sprite, exclusive file claims, exclusions, and checks.
 
-```text
-ready-to-implement -> in-progress -> awaiting-review -> closed
-                                  \-> rework -> in-progress
-                                  \-> blocked | needs-info
-```
-
-The persistent `symphony` label authorizes dispatch and coexists with exactly one
-queue-state label. Remove `symphony` at `awaiting-review`, `blocked`, or
-`needs-info`; this is the hard stop where a person owns the next decision.
+Workers treat issue labels, comments/workpads, branches, commits, and pull
+requests as read-only. Missing or inconsistent admission is a blocker, not
+permission to repair GitHub state.
 
 ## One-run contract
 
-1. Claim exactly one issue and one workspace. Do not batch a second issue.
-2. Read repository instructions and the charter before planning.
-3. Start the local ledger with `.factory/harness.mjs start` before investigation.
-4. Maintain one GitHub issue workpad containing plan, acceptance criteria, validation,
-   decisions, current evidence, and blockers.
-5. Reproduce or characterize current behavior before editing.
-6. Keep the change inside the issue's acceptance criteria and expected files.
-7. Record meaningful phases and commands in the local ledger. Do not log secrets,
-   full environment dumps, or full external payloads.
-8. Run the required gate through `.factory/harness.mjs gate`; never paraphrase or
-   override its `FACTORY_GATES:` verdict.
-9. Obtain a fresh verification context. If unavailable, use
-   `awaiting-review`, keep the PR draft, and say verification is unavailable.
-10. Finish the ledger, commit its unique file under `docs/factory/runs/`, push the
-    branch, open/update a PR, link it to the issue, move it to
-    `factory:awaiting-review`, and remove `symphony`.
+1. Claim exactly one issue and the assigned Sprite workspace.
+2. Read repository instructions, charter, issue, and controller workpad.
+3. Start the local ledger before investigation.
+4. Before direct source reads, run a task-specific
+   `graft ask "...acceptance criteria..." --source`; record query, graph
+   status/revision, ranked result, and fallback reason.
+5. Reproduce or characterize current behavior.
+6. Keep edits inside the accepted criteria and exclusive file claims.
+7. Record material commands and milestones without secrets or full external
+   payloads.
+8. Run the declared fail-closed gate and preserve its exact verdict.
+9. Finish as `awaiting-review`, `blocked`, or `failed`.
+10. Leave the working tree and ignored runtime ledger intact and return a
+    completion packet to the controller. Workers do not create the durable run
+    record.
+
+The worker never writes issue comments/labels, commits, pushes, opens or updates
+a PR, merges, deploys, force-pushes, or changes secrets.
 
 ## Observable execution
 
-The local ledger lives under ignored `.factory/runtime/<run-id>/`:
+The ignored local ledger lives under `.factory/runtime/<run-id>/`:
 
-- `state.json` is current machine-readable truth for the active workspace.
+- `state.json` is current machine-readable workspace truth.
 - `events.jsonl` is append-only execution history.
-- `node .factory/harness.mjs status --json` is the programmatic observer.
+- `node .factory/harness.mjs status --json` is the observer interface.
 
-The terminal record is copied to `docs/factory/runs/<run-id>.json` and committed.
-Run records are immutable. A correction creates a new run record that references
-the earlier run; it never rewrites history.
-
-Use these commands:
+Finishing seals the runtime state but does not write
+`docs/factory/runs/<run-id>.json`. After committing the source candidate, the
+controller finalizes the record against that exact clean `HEAD`, commits the
+record separately, and reruns review/checks on the final PR head. Run records are
+immutable; corrections create a new record. An `awaiting-review` or `succeeded`
+run can be finalized only when its latest recorded gate is `GREEN` and exited
+0; blocked and failed runs remain recordable without manufacturing a green
+result.
 
 ```bash
-node .factory/harness.mjs start --task COS-123 --title "..."
+node .factory/harness.mjs start --task GH-123 --title "..."
 node .factory/harness.mjs event --run <id> --phase planning --message "..."
 node .factory/harness.mjs exec --run <id> --phase reproduction -- <command...>
 node .factory/harness.mjs gate --run <id> --level full
 node .factory/harness.mjs finish --run <id> --status awaiting-review \
-  --verification not-run --summary "..."
+  --verification not-run --summary "Ready for controller review"
+node .factory/harness.mjs finalize --run <id> \
+  --candidate-sha "$(git rev-parse HEAD)" \
+  --approved-base-sha "$APPROVED_BASE_SHA" \
+  --required-gate-level "$APPROVED_GATE_LEVEL" # controller only
 node .factory/harness.mjs status --json
 ```
 
-## Evidence and completion
+## Evidence and review
 
-Evidence is a command, exit code, rendered artifact, observable state transition,
-or exact remote status. An agent statement is not evidence. Passing a typecheck
-does not establish runtime behavior; passing unit tests does not establish visual
-fidelity; a successful redirect does not establish payment.
+Evidence is a command, exit code, exact SHA, rendered artifact, observable state
+transition, or remote status. An agent statement is not evidence. Typecheck does
+not prove runtime behavior; unit tests do not prove visual fidelity.
 
-The writer does not grade the work. Use a fresh Codex review/subagent when the
-environment supports it. A successful run with no independent verifier must be
-recorded as `awaiting-review`, not `succeeded`.
+The completion packet includes issue/run IDs, base SHA, changed files, diff hash,
+reproduction, raw command exits, exact gate verdict, runtime evidence, record
+path, blockers, and out-of-scope findings.
+
+Classifier.dev may suggest review effort from coarse metadata only. Never send it
+paths, source, diffs, prompts, identifiers, credentials, secrets, customer data,
+or proprietary payloads. Its output cannot waive deterministic checks,
+independent review, approval, or a failure.
+
+On receipt of every terminal packet, the controller uses a separate clean
+controller-owned checkout pinned to the approved trusted factory SHA and a token
+limited to issue-label access. It runs that checkout's
+`.factory/scripts/bootstrap-github.sh --handoff <issue>` to remove
+`symphony-ready` and verify redispatch is disabled. It never executes the
+worker-workspace copy before review. The controller creates a fresh
+controller-owned clone from the approved base, applies the accepted source
+change as data on a non-protected feature branch, and commits the candidate
+there. It rejects symlinks and invalid/oversized ledger data, then copies only
+the run's `state.json` and `events.jsonl` into that clone's ignored runtime
+directory. The trusted checkout's harness finalizes with `FACTORY_ROOT` pointed
+at the fresh candidate clone, never the worker repository. The controller
+separately commits the immutable record, runs fresh independent review and
+exact-SHA checks, opens/updates the PR, triages every review thread, and performs
+only explicitly authorized merges or deploys. Finalization rejects `main`,
+`master`, detached `HEAD`, dirty workspaces, and mismatched candidate SHAs.
+Every Git read used by the trusted harness also overrides repository-local hooks
+and file-system monitors, ignores global/system configuration, and disables
+external diff and text-conversion commands as defense in depth.
+
+For a blocked or failed packet, the controller still creates a fresh clone at
+the approved base and switches to a non-protected evidence branch, but applies
+no worker source changes. It copies the validated ledger, finalizes against that
+clean no-op `HEAD`, and commits only the immutable record. Durable records keep
+the worker-reported file list as `worker_changed_files` and independently
+recompute `changed_files` from the approved base to the candidate. Finalization
+requires every Git cleanliness probe to succeed and rejects symlinks anywhere
+under the candidate's `docs/factory/runs` directory chain.
+
+The approved base SHA and required gate level are controller-owned inputs, never
+trusted from the copied worker ledger. Finalization requires the ledger base to
+equal the approved base; for review candidates it also requires the latest
+zero-exit green gate to equal the approved level. The controller launches Codex
+through an explicit `env -i` allowlist, so tracker/handoff tokens, SSH agent
+sockets, and provider credentials are absent from the worker process.
 
 ## Failure and retry
 
-On retry, read the workpad and local run status first. Continue from verified
-state; do not restart analysis. After two failures with the same hypothesis, stop
-patching and change the hypothesis. On an external blocker, record the exact
-missing capability, mark the issue `factory:blocked`, remove `symphony`, and stop
-without inventing a bypass.
+On retry, reconcile the existing ledger and dirty workspace before acting.
+Continue from verified progress. After two failures with the same hypothesis,
+stop and change the hypothesis. For an external blocker, write the exact unblock
+action into the local completion packet and stop without inventing a bypass.
 
 ## Non-negotiable boundaries
 
-- Never merge, deploy production, force-push, weaken tests, or reveal secrets.
-- Never edit the charter, gates, workflow, hooks, or skills to pass the current
-  issue unless the issue explicitly authorizes that factory change.
-- Never treat token count, runtime, a green agent process, or a confident summary
-  as proof that product work succeeded.
+- All project work executes inside the assigned Sprite.
+- Graft orientation is mandatory and fail-closed.
+- Never weaken tests, reveal secrets, or change factory constraints to make a
+  current issue pass unless that issue explicitly authorizes the policy change.
+- Never treat runtime, token count, process health, classifier output, or a
+  confident summary as proof of product success.

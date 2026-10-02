@@ -76,27 +76,44 @@ if required audit; then
 fi
 if required architecture; then
   printf '\n=== gate: architecture ===\n'
-  if ! has rg; then
-    skip architecture "rg missing"
+  ARCH_FAIL=0
+  ARCH_ERROR=0
+  git grep --untracked -n -F 'from "convex/react"' -- packages/ui >/dev/null 2>&1
+  DOUBLE_QUOTE_STATUS=$?
+  git grep --untracked -n -F "from 'convex/react'" -- packages/ui >/dev/null 2>&1
+  SINGLE_QUOTE_STATUS=$?
+  if [ "$DOUBLE_QUOTE_STATUS" -gt 1 ] || [ "$SINGLE_QUOTE_STATUS" -gt 1 ]; then
+    echo "architecture: unable to scan packages/ui imports" >&2
+    ARCH_ERROR=1
+  elif [ "$DOUBLE_QUOTE_STATUS" -eq 0 ] || [ "$SINGLE_QUOTE_STATUS" -eq 0 ]; then
+    echo "architecture: packages/ui must remain backend-independent"
+    ARCH_FAIL=1
+  fi
+  CORE_MATCHES="$(git grep --untracked -n -F '@johnnyc2026/contractor-os-core' -- apps packages 2>&1)"
+  CORE_STATUS=$?
+  if [ "$CORE_STATUS" -gt 1 ]; then
+    echo "architecture: unable to scan core imports" >&2
+    ARCH_ERROR=1
+  elif [ "$CORE_STATUS" -eq 0 ] && printf '%s\n' "$CORE_MATCHES" | grep -v '^packages/backend/' | grep -q .; then
+    echo "architecture: contractor-os-core imports belong under packages/backend"
+    ARCH_FAIL=1
+  fi
+  TRACKED_FILES="$(git ls-files 2>&1)"
+  TRACKED_STATUS=$?
+  if [ "$TRACKED_STATUS" -ne 0 ]; then
+    echo "architecture: unable to inspect tracked files" >&2
+    ARCH_ERROR=1
+  elif printf '%s\n' "$TRACKED_FILES" | grep -E '(^|/)\.env($|\.(local|production|preview|development)$)' >/dev/null 2>&1; then
+    echo "architecture: tracked secret-bearing env file detected"
+    ARCH_FAIL=1
+  fi
+  if [ "$ARCH_ERROR" -ne 0 ]; then
+    echo "MISCONFIGURED  architecture"
+    MISCONFIGURED="${MISCONFIGURED}${MISCONFIGURED:+,}architecture"
+  elif [ "$ARCH_FAIL" -eq 0 ]; then
+    echo "PASS  architecture"; PASSED=$((PASSED + 1))
   else
-    ARCH_FAIL=0
-    if rg -n "from [\"']convex/react[\"']" packages/ui >/dev/null 2>&1; then
-      echo "architecture: packages/ui must remain backend-independent"
-      ARCH_FAIL=1
-    fi
-    if rg -n '@johnnyc2026/contractor-os-core' apps packages --glob '!packages/backend/**' >/dev/null 2>&1; then
-      echo "architecture: contractor-os-core imports belong under packages/backend"
-      ARCH_FAIL=1
-    fi
-    if git ls-files | rg '(^|/)\.env($|\.(local|production|preview|development)$)' >/dev/null 2>&1; then
-      echo "architecture: tracked secret-bearing env file detected"
-      ARCH_FAIL=1
-    fi
-    if [ "$ARCH_FAIL" -eq 0 ]; then
-      echo "PASS  architecture"; PASSED=$((PASSED + 1))
-    else
-      echo "FAIL  architecture"; FAILED=$((FAILED + 1)); FAILING="${FAILING}${FAILING:+,}architecture"
-    fi
+    echo "FAIL  architecture"; FAILED=$((FAILED + 1)); FAILING="${FAILING}${FAILING:+,}architecture"
   fi
 fi
 

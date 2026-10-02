@@ -1,8 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APPLY=0
-[ "${1:-}" = "--apply" ] && APPLY=1
+ACTION="preview"
+ISSUE=""
+case "${1:-}" in
+  "") ;;
+  --apply) ACTION="apply" ;;
+  --handoff)
+    ACTION="handoff"
+    ISSUE="${2:-}"
+    [ -n "$ISSUE" ] || {
+      echo "error: --handoff requires an issue number or URL" >&2
+      exit 2
+    }
+    ;;
+  *)
+    echo "usage: bootstrap-github.sh [--apply | --handoff ISSUE]" >&2
+    exit 2
+    ;;
+esac
 
 command -v gh >/dev/null 2>&1 || {
   echo "error: gh is required" >&2
@@ -14,19 +30,32 @@ gh auth status >/dev/null 2>&1 || {
 }
 
 labels=(
-  "symphony|5319E7|Eligible for Symphony dispatch while present"
-  "factory:ready-to-implement|0E8A16|Acceptance criteria are ready for implementation"
-  "factory:in-progress|1D76DB|Owned by an active Symphony workspace"
-  "factory:rework|D93F0B|Review requires a changed implementation hypothesis"
-  "factory:awaiting-review|FBCA04|PR is ready for human review; Symphony stopped"
-  "factory:needs-info|C5DEF5|Blocked on a named product decision or fact"
-  "factory:blocked|B60205|Blocked on a named external capability"
-  "factory:verified|0E8A16|Independent verification accepted"
-  "factory:rejected|B60205|Independent verification found a blocker"
+  "symphony-ready|1D76DB|Controller approved this issue for Symphony dispatch"
+  "contract-approved|0E8A16|Controller verified bounded scope, dependencies, Sprite, and file claims"
 )
 
-if [ "$APPLY" -eq 0 ]; then
-  echo "Would create or update these labels:"
+if [ "$ACTION" = "handoff" ]; then
+  current_labels="$(gh issue view "$ISSUE" --json labels --jq '.labels[].name')" || {
+    echo "error: unable to read issue labels before handoff" >&2
+    exit 1
+  }
+  if printf '%s\n' "$current_labels" | grep -Fxq 'symphony-ready'; then
+    gh issue edit "$ISSUE" --remove-label 'symphony-ready' >/dev/null
+  fi
+  verified_labels="$(gh issue view "$ISSUE" --json labels --jq '.labels[].name')" || {
+    echo "error: unable to verify issue labels after handoff" >&2
+    exit 1
+  }
+  if printf '%s\n' "$verified_labels" | grep -Fxq 'symphony-ready'; then
+    echo "error: issue remains dispatchable after handoff" >&2
+    exit 1
+  fi
+  echo "Controller handoff recorded; symphony-ready is absent from $ISSUE."
+  exit 0
+fi
+
+if [ "$ACTION" = "preview" ]; then
+  echo "Would create or update these admission labels:"
   for entry in "${labels[@]}"; do echo "  ${entry%%|*}"; done
   echo "Re-run with --apply to write them."
   exit 0
@@ -37,5 +66,4 @@ for entry in "${labels[@]}"; do
   gh label create "$name" --color "$color" --description "$description" --force
 done
 
-echo "Symphony factory labels are ready."
-
+echo "Symphony two-label admission is ready."
