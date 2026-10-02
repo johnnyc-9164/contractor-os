@@ -8,13 +8,37 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      target:
+        description: Preview verification target
+        required: true
+        type: choice
+        default: preview
+        options:
+          - preview
+      preview_url:
+        description: Exact Vercel Preview URL to verify
+        required: true
+        type: string
+      expected_sha:
+        description: Full PR head commit SHA the Preview must report
+        required: true
+        type: string
+      pr_number:
+        description: Pull request number whose current head must match expected_sha
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 concurrency:
-  group: production
+  group: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'preview' && format('preview-verification-{0}', inputs.expected_sha) || 'production' }}
   cancel-in-progress: false
 
 jobs:
   deploy-convex:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     env:
       CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
@@ -38,6 +62,7 @@ jobs:
         run: npx convex deploy
 
   deploy-vercel:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     needs: [deploy-convex]
     env:
@@ -50,6 +75,7 @@ jobs:
         run: curl -sf -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
 
   smoke:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     needs: [deploy-vercel]
     steps:
@@ -144,6 +170,7 @@ jobs:
           esac
 
   deploy-marketing:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
     # Independent of the Convex deploy: marketing is a static surface with no backend.
     # Vercel project `contractor-os-marketing` exists (root: apps/marketing, default
     # *.vercel.app domain, no custom domain per MASTER_BRIEF S58; SSO protection off;
@@ -163,6 +190,7 @@ jobs:
         run: curl -sf -X POST "${{ secrets.VERCEL_MARKETING_DEPLOY_HOOK_URL }}"
 
   smoke-marketing:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     needs: [deploy-marketing]
     env:
@@ -196,3 +224,147 @@ jobs:
             exit 1
           fi
           echo "app URL present in marketing CTAs"
+
+  # Preview certification never deploys and runs only for an explicit Preview dispatch.
+  verify-preview:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' && inputs.target == 'preview' }}
+    name: verify exact Preview SHA and Convex health
+    runs-on: ubuntu-latest
+    # This Environment must allow only master and hold the dedicated bypass
+    # secret. Repository-level bypass secrets are unsafe on branch dispatches.
+    environment: preview-certification
+    permissions:
+      contents: read
+      deployments: read
+      pull-requests: read
+    env:
+      PREVIEW_TARGET: ${{ inputs.target }}
+      PREVIEW_URL: ${{ inputs.preview_url }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      PR_NUMBER: ${{ inputs.pr_number }}
+      TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: bind requested SHA to current PR head and trusted workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != 'refs/heads/master' ] || [ "$(git rev-parse HEAD)" != "$TRUSTED_WORKFLOW_SHA" ]; then
+            echo "Preview certification must run from the checked-out master workflow revision"
+            exit 1
+          fi
+          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || [[ ! "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Expected SHA must be full lowercase hex and PR number must be positive"
+            exit 1
+          fi
+          pr=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")
+          if [ "$(jq -r '.state' <<< "$pr")" != 'open' ] || \
+             [ "$(jq -r '.base.ref' <<< "$pr")" != 'master' ] || \
+             [ "$(jq -r '.head.sha' <<< "$pr")" != "$EXPECTED_SHA" ] || \
+             [ "$(jq -r '.head.repo.full_name' <<< "$pr")" != "$GITHUB_REPOSITORY" ]; then
+            echo "Requested SHA is not the current head of an open Contractor OS PR targeting master"
+            exit 1
+          fi
+
+      - name: require matching Vercel Preview deployment record
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$PREVIEW_URL" =~ ^https://contractoros-[a-z0-9-]+-johnnyc\.vercel\.app/?$ ]]; then
+            echo "Preview URL must use the contractoros-owned Vercel Preview host"
+            exit 1
+          fi
+          matched=false
+          deployment_ids=$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/deployments" \
+            -f sha="$EXPECTED_SHA" -f environment='Preview – contractoros' -f per_page=100 \
+            --jq '.[].id')
+          for deployment_id in $deployment_ids; do
+            status_url=$(gh api --method GET "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses" \
+              --jq '.[0] | select(.state == "success") | .environment_url')
+            if [ "${status_url%/}" = "${PREVIEW_URL%/}" ]; then
+              matched=true
+              break
+            fi
+          done
+          if [ "$matched" != true ]; then
+            echo "Preview URL is not a successful contractoros deployment for the requested PR head SHA"
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: verify requested commit is live on Preview
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_PREVIEW_CERT_BYPASS_SECRET }}
+        run: |
+          if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            echo "Missing preview-certification Environment bypass secret for Vercel Deployment Protection"
+            exit 1
+          fi
+          pnpm exec tsx tooling/sprite-factory/preview-deployment.ts \
+            --target "$PREVIEW_TARGET" \
+            --preview-url "$PREVIEW_URL" \
+            --expected-sha "$EXPECTED_SHA"
+
+      - name: auth routes behave for signed-out visitors
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_PREVIEW_CERT_BYPASS_SECRET }}
+        run: |
+          base="${PREVIEW_URL%/}"
+          # /sign-in must render the Clerk sign-in surface ...
+          for i in $(seq 1 5); do
+            code=$(curl -s -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" -o /dev/null -w "%{http_code}" "$base/sign-in")
+            if [ "$code" = "200" ]; then
+              echo "GET /sign-in -> 200 (attempt $i)"
+              break
+            fi
+            echo "attempt $i: GET /sign-in -> $code; waiting 20s..."
+            sleep 20
+            if [ "$i" = "5" ]; then
+              echo "FAIL: GET /sign-in never returned 200"
+              exit 1
+            fi
+          done
+          # ... while /sign-up must NOT exist: this is a private admin panel
+          # with no public sign-up surface.
+          code=$(curl -s -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" -o /dev/null -w "%{http_code}" "$base/sign-up")
+          if [ "$code" != "404" ]; then
+            echo "FAIL: GET /sign-up -> $code, expected 404 (no public sign-up surface)"
+            exit 1
+          fi
+          echo "GET /sign-up -> 404 (no public sign-up surface)"
+          # Signed-out page navigation to /dashboard must redirect to the
+          # sign-in route, never 404. (Accept: text/html makes Clerk treat this
+          # as a page request, the same as a real browser navigation.)
+          # NOTE: while the project runs on Clerk TEST keys, Clerk's
+          # dev-browser handshake interstitial fires before the middleware's
+          # own /sign-in redirect: the 307 goes to
+          # <instance>.clerk.accounts.dev/v1/client/handshake with
+          # __clerk_hs_reason=dev-browser-missing. That still proves
+          # /dashboard is auth-protected (not 404, not served open), so the
+          # smoke gate accepts it. When test keys are replaced with live keys
+          # (Johnny's call), the handshake goes away and the /sign-in branch
+          # below is the live assertion again.
+          code=$(curl -s -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" -o /dev/null -w "%{http_code}" -H "Accept: text/html" "$base/dashboard")
+          location=$(curl -s -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" -o /dev/null -w "%{redirect_url}" -H "Accept: text/html" "$base/dashboard")
+          echo "GET /dashboard -> $code"
+          pnpm exec tsx tooling/sprite-factory/preview-deployment.ts \
+            --assert-signed-out-redirect \
+            --status "$code" \
+            --redirect-url "$location" \
+            --preview-url "$PREVIEW_URL"

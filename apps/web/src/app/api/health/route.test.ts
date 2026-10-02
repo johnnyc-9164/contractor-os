@@ -19,6 +19,7 @@ describe("GET /api/health", () => {
 			...originalEnv,
 			NEXT_PUBLIC_CONVEX_URL: "https://example.convex.cloud",
 		};
+		delete process.env.VERCEL_ENV;
 		delete process.env.VERCEL_GIT_COMMIT_SHA;
 		delete process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA;
 	});
@@ -51,6 +52,20 @@ describe("GET /api/health", () => {
 		expect(await (await GET()).json()).toMatchObject({ sha: "unknown" });
 	});
 
+	it("reports the server-derived deployment environment", async () => {
+		process.env.VERCEL_ENV = "preview";
+		query.mockResolvedValue("ok");
+
+		expect(await (await GET()).json()).toMatchObject({
+			environment: "preview",
+		});
+
+		delete process.env.VERCEL_ENV;
+		expect(await (await GET()).json()).toMatchObject({
+			environment: "unknown",
+		});
+	});
+
 	it("maps a successful Convex query to ok", async () => {
 		query.mockResolvedValue({ status: "ok" });
 
@@ -63,7 +78,12 @@ describe("GET /api/health", () => {
 		const body = await (await GET()).json();
 
 		expect(body.convex).toBe("error");
-		expect(Object.keys(body).sort()).toEqual(["convex", "sha", "ts"]);
+		expect(Object.keys(body).sort()).toEqual([
+			"convex",
+			"environment",
+			"sha",
+			"ts",
+		]);
 		expect(JSON.stringify(body)).not.toContain("SECRET_DATABASE_CREDENTIAL");
 		expect(new Date(body.ts).toISOString()).toBe(body.ts);
 	});
