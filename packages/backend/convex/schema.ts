@@ -84,9 +84,11 @@ export default defineSchema({
 		reopened_from: v.optional(v.string()),
 	})
 		.index("by_key", ["key"])
+		.index("by_company_key", ["company_id", "key"])
 		// TC-LEAD-01: bridge index. UI lists co_lead identifiers (listLeads) but
 		// dispatches lead.* ops; findLead falls back here when by_key misses.
-		.index("by_co_lead_id", ["co_lead_id"]),
+		.index("by_co_lead_id", ["co_lead_id"])
+		.index("by_company_co_lead_id", ["company_id", "co_lead_id"]),
 
 	// ── Entity 1: Opportunity ──────────────────────────────────────────────
 	opportunities: defineTable({
@@ -211,7 +213,9 @@ export default defineSchema({
 		formula_set_version: v.optional(v.string()),
 		lead_id: v.optional(v.string()), // → leads.key
 		bid_id: v.optional(v.string()), // → bids.key
-	}).index("by_key", ["key"]),
+	})
+		.index("by_key", ["key"])
+		.index("by_company_lead_status", ["company_id", "lead_id", "status"]),
 
 	estimate_lines: defineTable({
 		...provenance,
