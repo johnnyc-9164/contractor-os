@@ -471,11 +471,23 @@ export const dispatch = mutation({
 		payload: v.any(),
 	},
 	handler: async (ctx, args): Promise<Envelope> => {
-		const replay = await ctx.db
-			.query("catalog_idempotency")
-			.withIndex("by_key", (q) => q.eq("key", args.idempotency_key))
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			return envelope(args.contract, args.schema_version, {
+				error: { code: "UNAUTHENTICATED" },
+			});
+		}
+		const membership = await ctx.db
+			.query("contractorOsMemberships")
+			.withIndex("by_identity", (q) =>
+				q.eq("tokenIdentifier", identity.tokenIdentifier),
+			)
 			.unique();
-		if (replay) return JSON.parse(replay.result) as Envelope;
+		if (!membership?.enabled || !membership.tenantId) {
+			return envelope(args.contract, args.schema_version, {
+				error: { code: "FORBIDDEN" },
+			});
+		}
 
 		let actor: ResolvedUser;
 		try {
@@ -483,6 +495,12 @@ export const dispatch = mutation({
 		} catch {
 			return envelope(args.contract, args.schema_version, {
 				error: { code: "UNAUTHENTICATED" },
+			});
+		}
+
+		if (actor.status !== "active") {
+			return envelope(args.contract, args.schema_version, {
+				error: { code: "FORBIDDEN" },
 			});
 		}
 
@@ -518,6 +536,29 @@ export const dispatch = mutation({
 					detail: { required_role: operation.authority.join(" or ") },
 				},
 			});
+		}
+
+		// A request key is only replayable by the same authorized actor in the
+		// same verified tenant. Check this after membership and role authorization.
+		const scopedKey = JSON.stringify([
+			membership.tenantId,
+			actor.user_key,
+			args.idempotency_key,
+		]);
+		const replay = await ctx.db
+			.query("catalog_idempotency")
+			.withIndex("by_key", (q) => q.eq("key", scopedKey))
+			.unique();
+		if (replay) {
+			if (replay.contract !== args.contract) {
+				return envelope(args.contract, args.schema_version, {
+					error: {
+						code: "VALIDATION",
+						detail: "idempotency key reused for another contract",
+					},
+				});
+			}
+			return JSON.parse(replay.result) as Envelope;
 		}
 
 		const parsed = operation.schema.safeParse(args.payload);
@@ -583,7 +624,7 @@ export const dispatch = mutation({
 			executor: actor.user_key,
 		});
 		await ctx.db.insert("catalog_idempotency", {
-			key: args.idempotency_key,
+			key: scopedKey,
 			contract: args.contract,
 			result: JSON.stringify(response),
 			created_by: actor.user_key,

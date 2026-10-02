@@ -60,6 +60,7 @@ async function seedLead(t: ReturnType<typeof setup>, stage: LeadStage) {
 	await t.run(async (ctx) => {
 		await ctx.db.insert("leads", {
 			key,
+			tenantId: TENANT_ID,
 			title: "Seed lead",
 			stage,
 			created_by: "system",
