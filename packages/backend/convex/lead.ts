@@ -136,12 +136,13 @@ export type CapturePayload = {
 	notes?: string;
 };
 
-export async function capture(
+export async function captureForTenant(
 	ctx: MutationCtx,
 	payload: CapturePayload,
 	actor: ResolvedUser,
+	tenantId: string,
+	sourceRef?: string,
 ): Promise<ServiceResult> {
-	const { tenantId } = await requireTenant(ctx);
 	const now = new Date().toISOString();
 	const key = `lead_${newUlid()}`;
 	await ctx.db.insert("leads", {
@@ -153,11 +154,20 @@ export async function capture(
 		created_at: now,
 		updated_by: actor.user_key,
 		updated_at: now,
-		source_ref: undefined,
+		source_ref: sourceRef,
 		schema_version: SCHEMA_VERSION,
 		company_id: COMPANY_ID,
 	});
 	return { record_id: key, status: "Prospect", to_state: "Prospect" };
+}
+
+export async function capture(
+	ctx: MutationCtx,
+	payload: CapturePayload,
+	actor: ResolvedUser,
+): Promise<ServiceResult> {
+	const { tenantId } = await requireTenant(ctx);
+	return captureForTenant(ctx, payload, actor, tenantId);
 }
 
 type LeadPayload = { lead_id: string };
